@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lvlup.ai/schemas/user_plan.json",
+  "title": "UserPlan",
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer"},
+    "user_google_sub": {"type": "string"},
+    "plan_tier_id": {"type": "integer"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "required": ["user_google_sub", "plan_tier_id", "started_at"]
+} 

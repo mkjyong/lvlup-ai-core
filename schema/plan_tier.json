@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lvlup.ai/schemas/plan_tier.json",
+  "title": "PlanTier",
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer"},
+    "name": {"type": "string"},
+    "price_usd": {"type": "number", "minimum": 0},
+    "prompt_limit": {"type": "integer", "minimum": 0},
+    "completion_limit": {"type": "integer", "minimum": 0},
+    "weekly_request_limit": {"type": "integer", "minimum": 0},
+    "monthly_request_limit": {"type": "integer", "minimum": 0},
+    "special_monthly_request_limit": {"type": ["integer", "null"], "minimum": 0},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["name", "price_usd", "prompt_limit", "completion_limit", "weekly_request_limit", "monthly_request_limit", "created_at"]
+} 

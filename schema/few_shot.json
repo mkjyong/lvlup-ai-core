@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/few_shot.schema.json",
+  "title": "FewShot",
+  "type": "object",
+  "properties": {
+    "id": {"type": "string"},
+    "chat_id": {"type": "integer", "description": "1=general, 2=LoL, 3=PUBG, ..."},
+    "role": {"type": "string", "enum": ["user", "assistant"]},
+    "content": {"type": "string"},
+    "score": {"type": "number", "minimum": 0},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["chat_id", "role", "content", "score", "created_at"],
+  "additionalProperties": false
+} 

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lvlup.ai/schemas/raw_data.json",
+  "title": "RawData",
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer"},
+    "doc_id": {"type": "string"},
+    "source": {"type": "string", "description": "데이터 출처 식별자(video_transcripts, lol_patch 등)"},
+    "text": {"type": "string"},
+    "processed": {"type": "boolean"},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["doc_id", "source", "text", "processed", "created_at"]
+} 

@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design Tokens */
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f7f9fc;
+  --color-primary: #00e0ff;
+  --color-secondary: #ff4dfe;
+  --color-text: #1a1a1a;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-accent: #00ff95;
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+}
+
+.dark {
+  --color-bg: #080b12;
+  --color-surface: #0f1420;
+  --color-primary: #00e0ff;
+  --color-secondary: #ff4dfe;
+  --color-text: #e0e6f6;
+  --color-muted: #8892b0;
+  --color-border: #1e2538;
+  --color-accent: #00ff95;
+
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+html {
+  font-size: clamp(16px, 1.1vw, 18px);
+}
+body {
+  line-height: 1.6;
+} 

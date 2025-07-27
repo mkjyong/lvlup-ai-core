@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/llm_usage.schema.json",
+  "title": "LLMUsage",
+  "type": "object",
+  "properties": {
+    "id": {"type": "string"},
+    "user_google_sub": {"type": "string"},
+    "model": {"type": "string"},
+    "prompt_tokens": {"type": "integer", "minimum": 0},
+    "completion_tokens": {"type": "integer", "minimum": 0},
+    "total_tokens": {"type": "integer", "minimum": 0},
+    "cost_usd": {"type": "number", "minimum": 0},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["user_google_sub", "model", "total_tokens", "cost_usd", "created_at"]
+} 

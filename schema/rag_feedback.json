@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lvlup.ai/schemas/rag_feedback.json",
+  "title": "RagFeedback",
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer"},
+    "query": {"type": "string"},
+    "answer": {"type": ["string", "null"]},
+    "chunk_ids": {
+      "type": ["array", "null"],
+      "items": {"type": "integer"}
+    },
+    "hit": {"type": "boolean"},
+    "model_version": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["query", "hit", "created_at"]
+} 

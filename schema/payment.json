@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/payment.schema.json",
+  "title": "Payment",
+  "type": "object",
+  "properties": {
+    "payment_id": {"type": "string"},
+    "user_google_sub": {"type": "string"},
+    "amount_usd": {"type": "number", "minimum": 0},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "status": {"type": "string", "enum": ["pending", "succeeded", "failed"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["payment_id", "user_google_sub", "amount_usd", "currency", "status", "created_at"]
+} 

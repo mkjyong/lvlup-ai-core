@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/user.schema.json",
+  "title": "User",
+  "type": "object",
+  "properties": {
+    "google_sub": {"type": "string"},
+    "email": {"type": "string", "format": "email"},
+    "avatar": {"type": "string", "format": "uri", "nullable": true},
+    "plan_tier": {"type": "string", "enum": ["free", "premium"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["google_sub", "email", "plan_tier", "created_at"]
+} 

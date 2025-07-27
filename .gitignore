@@ -1,0 +1,66 @@
+# -----------------------------
+# Global ignores
+# -----------------------------
+
+# macOS
+.DS_Store
+
+# -----------------------------
+# Python – backend & data_ingest
+# -----------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual environments
+.env
+.venv/
+venv/
+ENV/
+env/
+backend/.env
+data_ingest/.env
+
+# Cache & logs
+.mypy_cache/
+.pytest_cache/
+ruff_cache/
+.cache/
+*.log
+coverage/
+.coverage
+htmlcov/
+
+# Database/artefacts
+*.sqlite3
+*.db
+
+# -----------------------------
+# Node / Frontend
+# -----------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.cache/
+frontend/.turbo/
+frontend/.parcel-cache/
+frontend/.eslintcache
+
+# Build artefacts
+*.lock
+
+# -----------------------------
+# Airflow & misc temp files
+# -----------------------------
+airflow/logs/
+
+# Temporary files
+*.swp
+*.tmp
+*.bak
+*~
+
+
+.cursor/

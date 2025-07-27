@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lvlup.ai/schemas/review_queue.json",
+  "title": "ReviewQueue",
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer"},
+    "chunk_id": {"type": "integer"},
+    "doc_id": {"type": "string"},
+    "reason": {"type": "string"},
+    "status": {"type": "string", "enum": ["pending", "done"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "required": ["chunk_id", "doc_id", "reason", "status", "created_at"]
+} 

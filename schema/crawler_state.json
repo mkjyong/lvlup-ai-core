@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lvlup.ai/schemas/crawler_state.json",
+  "title": "CrawlerState",
+  "type": "object",
+  "properties": {
+    "source": {"type": "string"},
+    "last_ts": {"type": "string", "format": "date-time"}
+  },
+  "required": ["source", "last_ts"]
+} 
