@@ -44,6 +44,6 @@
     "@types/uuid": "^9.0.4",
     "vite-plugin-compression": "^0.5.1",
     "@types/node": "^20.11.30",
-    "openapi-typescript-codegen": "^0.31.0"
+    "openapi-typescript-codegen": "^0.30.2"
   }
 }
