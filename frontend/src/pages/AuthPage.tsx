@@ -63,17 +63,6 @@ const AuthPage: React.FC = () => {
             width="300"
           />
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            login('guest-token');
-            localStorage.setItem('onboarded', 'true');
-            navigate('/chat');
-          }}
-          className="mx-auto mt-4 block rounded border border-accent px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-bg motion-safe:hover:shadow-[0_0_6px_var(--color-accent)]"
-        >
-          게스트 모드로 체험하기
-        </button>
         <p className="mt-4 flex items-center justify-center gap-1 text-xs text-muted/80">
           <svg
             xmlns="http://www.w3.org/2000/svg"
