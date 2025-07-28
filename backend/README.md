@@ -78,6 +78,19 @@ API 문서: <http://localhost:8000/docs>
 
 ---
 
+## Quick Start (local)
+
+```bash
+# activate venv & install deps first ...
+
+# run dev server on port 1100
+uvicorn app.main:app --reload --port 1100
+```
+
+> 기본 포트를 1100으로 사용합니다(OS 환경변수 `PORT` 미설정 시).
+
+---
+
 ## 🏗️ 데이터베이스
 
 ### 스키마 관리

@@ -33,8 +33,8 @@ def decrypt_email(token: str) -> str:
 EMAIL_PATTERN = re.compile(r"[\w\.-]+@([\w\.-]+)\.[A-Za-z]{2,6}")
 # JWT / 토큰 패턴 (대략적)
 JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}")
-# RevenueCat / Stripe Secret Key 예시 패턴 (rc_ 또는 whsec_)
-SECRET_KEY_PATTERN = re.compile(r"(rc_|whsec_)[A-Za-z0-9]+")
+# Stripe / PortOne Secret Key 예시 패턴
+SECRET_KEY_PATTERN = re.compile(r"(whsec_|portone_)[A-Za-z0-9]+", re.IGNORECASE)
 
 
 def mask_pii(value: str) -> str:

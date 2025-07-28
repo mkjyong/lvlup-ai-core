@@ -15,6 +15,7 @@ class User(SQLModel, table=True):
     email_enc: str = Field(nullable=False, alias="email")
     avatar: Optional[str] = None
     plan_tier: str = "free"
+    billing_key: str | None = None  # PortOne BillingKey (토큰화 결제수단)
     # === Referral System ===
     # 개인별 고유 레퍼럴 코드 및 적립된 할인권(=추천인 수)
     referral_code: str | None = Field(default=None, index=True, sa_column_kwargs={"unique": True})

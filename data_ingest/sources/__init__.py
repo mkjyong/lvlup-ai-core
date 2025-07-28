@@ -6,8 +6,12 @@ BaseCrawler, RawDoc 을 외부에 노출하여 재사용한다.
 """
 
 from .base import BaseCrawler, RawDoc  # noqa: F401
+from .opgg import OPGGCrawler  # noqa: F401
+from .metasrc import MetaSRCCrawler  # noqa: F401
 
 __all__ = [
     "BaseCrawler",
     "RawDoc",
+    "OPGGCrawler",
+    "MetaSRCCrawler",
 ] 

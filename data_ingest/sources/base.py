@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncIterator, Dict, List
@@ -117,7 +118,8 @@ class BaseCrawler(ABC):
     # Rate-limit helper (context manager)
     # ---------------------------------------------
 
+    @asynccontextmanager
     async def _bounded(self):  # noqa: D401 – not a public fn
-        """async with self._bounded(): …  패턴으로 사용."""
+        """`async with self._bounded(): …` 패턴으로 사용되는 rate-limit helper."""
         async with self._sem:
             yield 

@@ -99,15 +99,15 @@ def create_app() -> FastAPI:
     async def _shutdown_event():  # noqa: D401
         """종료 시 외부 클라이언트 정리."""
 
-        # RevenueCat HTTPX 클라이언트 종료
-        from app.services import revenuecat as _rc
+        # PortOne HTTPX 클라이언트 종료
+        from app.services import portone as _po
 
-        if hasattr(_rc, "_client") and not _rc._client.is_closed:  # type: ignore[attr-defined]
+        if hasattr(_po, "_client") and not _po._client.is_closed:  # type: ignore[attr-defined]
             import asyncio
 
             # ensure awaitable in shutdown
-            if asyncio.iscoroutinefunction(_rc._client.aclose):
-                await _rc._client.aclose()
+            if asyncio.iscoroutinefunction(_po._client.aclose):
+                await _po._client.aclose()
 
     return app
 

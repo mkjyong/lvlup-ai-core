@@ -8,7 +8,7 @@ class CostSnapshot(SQLModel, table=True):
     """LLM 호출 1회당 비용 산출 스냅샷."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    usage_id: Optional[int] = Field(default=None, foreign_key="llmusage.id")
+    usage_id: Optional[int] = Field(default=None, foreign_key="llm_usage.id")
     model: str
     input_tokens: int
     output_tokens: int

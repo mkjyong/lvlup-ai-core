@@ -36,11 +36,10 @@ class Settings(BaseSettings):
     # === 보안 ===
     EMAIL_ENC_KEY: str  # 32-byte urlsafe_base64 Fernet key (필수)
 
-    # === RevenueCat ===
-    REVENUECAT_API_KEY: str = ""
-    REVENUECAT_PROJECT_ID: str = ""
-    REVENUECAT_BASE_URL: str = "https://api.revenuecat.com"
-    REVENUECAT_WEBHOOK_SECRET: str = ""
+    # === PortOne (아임포트) ===
+    PORTONE_API_SECRET: str = ""
+    PORTONE_BASE_URL: str = "https://api.portone.io"
+    PORTONE_WEBHOOK_SECRET: str = ""
     # === Slack Webhooks ===
     SLACK_WEBHOOK_SUBSCRIPTION_TRACKER: str | None = None
     SLACK_WEBHOOK_UNSUBSCRIPTION_TRACKER: str | None = None

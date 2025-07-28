@@ -10,11 +10,14 @@ const BillingPage: React.FC = () => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
 
+  const currency = navigator.language.startsWith('ko') ? 'KRW' : 'USD';
+
   const initiateCheckout = async (offeringId: string) => {
     try {
       setLoadingId(offeringId);
       const res = await api.post<{ checkout_url: string }>('/billing/initiate', {
         offering_id: offeringId,
+        currency,
       });
       window.location.href = res.data.checkout_url;
     } catch (error) {
@@ -45,7 +48,9 @@ const BillingPage: React.FC = () => {
               </button>
               <span className={period==='yearly'?'text-accent font-semibold':'text-muted'}>연간</span>
             </div>
-            <p className="mb-6 text-4xl font-bold text-accent drop-shadow">{offerings[period].price}</p>
+            <p className="mb-6 text-4xl font-bold text-accent drop-shadow">
+              {currency === 'KRW' ? offerings[period].price.replace('$', '₩').replace('/ 월', '원 / 월').replace('/ 년', '원 / 년') : offerings[period].price}
+            </p>
 
             {/* Feature list */}
             <ul className="mb-8 space-y-2 text-left text-sm sm:text-base">

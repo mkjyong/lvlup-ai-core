@@ -10,7 +10,7 @@
 -- --------------------------------------------------
 
 -- Extensions -----------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- pgvector extension no longer required (embeddings moved to OpenAI Vector Store)
 
 -- --------------------------------------------------
@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     email_enc        TEXT    NOT NULL,
     avatar           TEXT,
     plan_tier        TEXT    NOT NULL DEFAULT 'free',
+    billing_key      TEXT,
     referral_code    TEXT UNIQUE,
     referral_credits INT     NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()

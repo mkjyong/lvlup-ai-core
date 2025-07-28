@@ -13,7 +13,7 @@ class UserPlan(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_google_sub: str = Field(foreign_key="user.google_sub", index=True)
-    plan_tier_id: int = Field(foreign_key="plantier.id")
+    plan_tier_id: int = Field(foreign_key="plan_tier.id")
     started_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: Optional[datetime] = None
 

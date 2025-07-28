@@ -5,7 +5,7 @@ from sqlmodel import Field, SQLModel
 
 
 class PaymentLog(SQLModel, table=True):
-    """RevenueCat 결제/구독 이벤트 로그."""
+    """결제/구독 이벤트 로그."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_google_sub: str = Field(index=True)

@@ -20,15 +20,17 @@ async def _post(webhook_url: str | None, text: str) -> None:  # noqa: D401
         pass
 
 
-async def notify_subscription(user_id: str, offering_id: str, amount_usd: float) -> None:
+async def notify_subscription(user_id: str, offering_id: str, amount: float, currency: str = "USD", pay_method: str | None = None) -> None:
     """신규 구독 알림."""
-    text = f":tada: *Subscription* user={user_id}, plan={offering_id}, amount=${amount_usd:.2f}"
+    method = f", method={pay_method}" if pay_method else ""
+    text = f":tada: *Subscription* user={user_id}, plan={offering_id}, amount={amount:,.2f} {currency}{method}"
     await _post(settings.SLACK_WEBHOOK_SUBSCRIPTION_TRACKER, text)
 
 
-async def notify_unsubscription(user_id: str, offering_id: str) -> None:
-    """구독 취소 알림."""
-    text = f":x: *Unsubscription* user={user_id}, plan={offering_id}"
+async def notify_unsubscription(user_id: str, offering_id: str, reason: str | None = None) -> None:
+    """구독 취소 / 실패 / 환불 알림."""
+    reason_txt = f", reason={reason}" if reason else ""
+    text = f":x: *Unsubscription* user={user_id}, plan={offering_id}{reason_txt}"
     await _post(settings.SLACK_WEBHOOK_UNSUBSCRIPTION_TRACKER, text)
 
 
