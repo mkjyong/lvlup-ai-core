@@ -17,9 +17,11 @@ from data_ingest.common.metrics import UPSERT_LATENCY_SECONDS
 
 import asyncpg
 import re, urllib.parse, ssl as _ssl
+from pathlib import Path
 
 PG_CONN_STR = os.getenv("PG_CONN_STR", "postgresql://postgres:postgres@localhost:5432/postgres")
-PG_SSL_MODE = os.getenv("PG_SSL_MODE")  # e.g. "require" for Supabase, "disable" for local
+PG_SSL_MODE = os.getenv("PG_SSL_MODE", "require").lower()  # e.g. require, verify-full, noverify, disable
+PG_SSL_ROOT_CERT = os.getenv("PG_SSL_ROOT_CERT")  # optional custom CA bundle path
 
 
 class Database:
@@ -66,10 +68,20 @@ class Database:
                 max_size=self._max_size,
                 command_timeout=60,
             )
-            # Configure SSL only when explicitly requested and supported by asyncpg
-            if PG_SSL_MODE and PG_SSL_MODE.lower() not in ("disable", "false", "0"):
-                # asyncpg expects ssl.SSLContext or bool. Create default context.
-                pool_kwargs["ssl"] = _ssl.create_default_context()
+            # ------------------------------------------------------------
+            # Flexible SSL handling depending on PG_SSL_MODE value
+            # ------------------------------------------------------------
+            if PG_SSL_MODE not in ("disable", "false", "0", "off", "plain"):
+                # Build SSLContext
+                ctx = _ssl.create_default_context()
+                # Load custom root CA bundle if provided
+                if PG_SSL_ROOT_CERT and Path(PG_SSL_ROOT_CERT).expanduser().exists():
+                    ctx.load_verify_locations(Path(PG_SSL_ROOT_CERT).expanduser())
+                # noverify / insecure mode – skip certificate validation
+                if PG_SSL_MODE in ("noverify", "insecure"):
+                    ctx.check_hostname = False
+                    ctx.verify_mode = _ssl.CERT_NONE
+                pool_kwargs["ssl"] = ctx
 
             try:
                 self._pool = await asyncpg.create_pool(**pool_kwargs)
