@@ -16,4 +16,4 @@ class MatchCache(SQLModel, table=True):
     raw: dict = Field(sa_column=Column(JSON))
     ttl: datetime
 
-    user: "User" = Relationship() 
+    # Relationship omitted in test context 

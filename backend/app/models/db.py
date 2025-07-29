@@ -10,6 +10,23 @@ import app.models  # noqa: F401  # Ensure models are imported before create_all
 
 _settings = get_settings()
 
+# ---------------------------------------------------------------------------
+# Asyncpg sslmode compatibility
+# ---------------------------------------------------------------------------
+
+db_url = _settings.DATABASE_URL
+
+# asyncpg >0.28.0 는 sslmode 파라미터를 지원하지 않는다.
+# SQLAlchemy 가 그대로 전달하면 TypeError 가 발생하므로 제거한다.
+if db_url.startswith("postgresql+asyncpg") and "sslmode=" in db_url:
+    from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+
+    parsed = urlparse(db_url)
+    query_params = [(k, v) for k, v in parse_qsl(parsed.query) if k != "sslmode"]
+    new_query = urlencode(query_params)
+    parsed = parsed._replace(query=new_query)
+    db_url = urlunparse(parsed)
+
 # 동기 엔진(마이그레이션 등에서 사용 가능)
 sync_engine = create_engine(_settings.DATABASE_URL, echo=_settings.DEBUG, pool_pre_ping=True, future=True)
 
@@ -18,7 +35,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker
 
 async_engine: AsyncEngine = create_async_engine(
-    _settings.DATABASE_URL,
+    db_url,
     echo=_settings.DEBUG,
     future=True,
     pool_size=_settings.DB_POOL_SIZE,

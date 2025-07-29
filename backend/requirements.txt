@@ -22,4 +22,6 @@ google-auth-oauthlib==1.2.0
 cryptography==42.0.5 
 tiktoken==0.6.0 
 forex-python==1.8 
-jsonschema==4.22.0 
+jsonschema==4.22.0
+greenlet==3.0.3 
+psycopg2-binary==2.9.9 

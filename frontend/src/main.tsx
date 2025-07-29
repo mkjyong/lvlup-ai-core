@@ -8,6 +8,11 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/ErrorBoundary';
 import './globals.css';
+// @ts-ignore - Vercel Analytics has no type declaration yet
+import { inject } from '@vercel/analytics';
+
+// Run Vercel Web Analytics (no-op in dev)
+inject();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

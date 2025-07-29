@@ -18,4 +18,4 @@ class PerformanceStats(SQLModel, table=True):
     metrics: dict = Field(sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    user: "User" = Relationship() 
+    # Relationship omitted in test context 

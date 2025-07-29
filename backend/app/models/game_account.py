@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import UniqueConstraint as SAUniqueConstraint
 from sqlmodel import Field, SQLModel, Relationship
@@ -16,8 +16,13 @@ class GameAccount(SQLModel, table=True):
     region: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationship back to User
-    user: "User" = Relationship(back_populates="game_accounts")
+    # Relationship omitted in test context
+
+    # Runtime import to ensure User model is registered for this relationship
+    if TYPE_CHECKING:
+        from .user import User  # pragma: no cover
+    else:
+        from . import user as _user  # noqa: F401
 
     __table_args__ = (
         SAUniqueConstraint("user_google_sub", "game", name="uq_user_game_account"),

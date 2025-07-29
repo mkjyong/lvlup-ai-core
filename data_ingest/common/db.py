@@ -16,6 +16,7 @@ from typing import AsyncIterator, List
 from data_ingest.common.metrics import UPSERT_LATENCY_SECONDS
 
 import asyncpg
+import re, urllib.parse, ssl as _ssl
 
 PG_CONN_STR = os.getenv("PG_CONN_STR", "postgresql://postgres:postgres@localhost:5432/postgres")
 PG_SSL_MODE = os.getenv("PG_SSL_MODE")  # e.g. "require" for Supabase, "disable" for local
@@ -42,9 +43,20 @@ class Database:
         If a driver suffix exists (e.g. ``+asyncpg``), it is stripped.
         """
 
-        import re
-
-        return re.sub(r"^postgresql\+[a-zA-Z0-9_]+://", "postgresql://", dsn)
+        dsn = re.sub(r"^postgresql\+[a-zA-Z0-9_]+://", "postgresql://", dsn)
+        # If hostname is missing (e.g. "postgresql://user:pass@:5432/db"), inject localhost
+        parsed = urllib.parse.urlsplit(dsn)
+        if not parsed.hostname:
+            # rebuild netloc with localhost while preserving credentials & port
+            userinfo = ""
+            if parsed.username:
+                userinfo = parsed.username
+                if parsed.password:
+                    userinfo += f":{parsed.password}"
+            port_part = f":{parsed.port}" if parsed.port else ""
+            netloc = f"{userinfo}@localhost{port_part}"
+            dsn = urllib.parse.urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+        return dsn
 
     async def init(self) -> None:
         if self._pool is None:
@@ -54,11 +66,16 @@ class Database:
                 max_size=self._max_size,
                 command_timeout=60,
             )
-            # Enable SSL if PG_SSL_MODE is set (recommended for Supabase)
-            if PG_SSL_MODE:
-                pool_kwargs["ssl"] = PG_SSL_MODE
+            # Configure SSL only when explicitly requested and supported by asyncpg
+            if PG_SSL_MODE and PG_SSL_MODE.lower() not in ("disable", "false", "0"):
+                # asyncpg expects ssl.SSLContext or bool. Create default context.
+                pool_kwargs["ssl"] = _ssl.create_default_context()
 
-            self._pool = await asyncpg.create_pool(**pool_kwargs)
+            try:
+                self._pool = await asyncpg.create_pool(**pool_kwargs)
+            except Exception as exc:  # noqa: BLE001
+                # Provide clearer diagnostics for connection errors.
+                raise RuntimeError(f"Failed to initialise Postgres connection pool – check PG_CONN_STR ({self._dsn}) and network reachability: {exc}") from exc
 
     async def close(self) -> None:
         if self._pool is not None:
