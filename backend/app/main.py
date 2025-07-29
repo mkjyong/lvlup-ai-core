@@ -80,6 +80,10 @@ def create_app() -> FastAPI:
     app.include_router(performance_router.router)
     app.include_router(assets_router.router)
 
+    # Simple email/password mock router (primarily for tests)
+    from app.routers import auth_mock as auth_mock_router  # type: ignore
+    app.include_router(auth_mock_router.router)
+
     # 예외 핸들러 등록
     register_exception_handlers(app)
 

@@ -65,7 +65,7 @@ export PYTHONPATH=.
 
 # FastAPI (hot-reload)
 # 1) 레포 루트(lvlup-ai-core) 위치에서 실행
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 2) 혹은 backend 디렉터리 내부에서 실행
 # uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

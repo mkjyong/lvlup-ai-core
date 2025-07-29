@@ -4,7 +4,9 @@ A standalone ETL pipeline that crawls external gaming content (patch notes, blog
 
 ---
 
-## 1. Quick Start (Local)
+## 1. Quick Start
+
+### 1-A. 로컬 테스트 (Ad-hoc)
 
 ```bash
 # 1) clone & create venv
@@ -25,7 +27,26 @@ python -m data_ingest.scripts.adhoc_run run \
     --dry-run
 ```
 
-> `--dry-run` → 벡터스토어/DB 업서트 **X**. 로그만 확인해 흐름을 테스트하세요.
+`--dry-run` → 벡터스토어/DB 업서트 **X**. 로그만 확인해 흐름을 테스트하세요.
+
+### 1-B. 데몬 모드 (실서비스용)
+
+패키지를 모듈 실행형으로 띄우면 백그라운드에서 주기적으로 새 raw_data 를 처리합니다.
+
+```bash
+# 기본 설정으로 실행 (Ctrl-C 로 종료)
+python -m data_ingest
+
+# 환경변수로 동작 파라미터 오버라이드
+INGEST_SOURCES=lol_patch,pubg_patch \
+INGEST_LOOP_INTERVAL=600 \  # 10m
+python -m data_ingest
+```
+
+* Prometheus metrics: `0.0.0.0:8000/`  
+* Health-check: `0.0.0.0:8001/healthz`
+
+데몬은 내부에서 `_process()` 코루틴을 재사용하기 때문에 Airflow / CLI 와 동일한 품질·필터 로직을 따릅니다.
 
 ---
 
@@ -38,6 +59,12 @@ python -m data_ingest.scripts.adhoc_run run \
 | `OPENAI_API_KEY` |  | LLM relevance & embedding 호출에 필요 |
 | `QUALITY_*` | see `common/config.py` | 품질 스코어 가중치/임계값 |
 | `PROM_PORT` | `8008` | Prometheus exporter 포트 |
+| `INGEST_SOURCES` | `lol_patch,pubg_patch,namu_wiki` | 데몬 모드 – 처리할 source ID CSV |
+| `INGEST_LOOP_INTERVAL` | `300` | 데몬 모드 – sweep 주기(초) |
+| `INGEST_LIMIT` | `1000` | 데몬 모드 – 소스별 최대 처리 레코드 수 |
+| `INGEST_PARALLEL` | `4` | 데몬 모드 – 동시 embedding 작업 수 |
+| `INGEST_BATCH_SIZE` | `100` | 데몬 모드 – DB fetch batch size |
+| `INGEST_DRY_RUN` | `false` | `true` → VectorStore/DB 업서트 생략, 로그만 출력 |
 | `SLACK_WEBHOOK_ALERT_DATA_INGESTOR_ERR` | _optional_ | 크롤러 에러 Slack 알림 |
 | `SENTRY_DSN` | _optional_ | Sentry 연동 |
 

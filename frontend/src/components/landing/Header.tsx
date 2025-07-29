@@ -18,7 +18,7 @@ const Header: React.FC = () => {
           to={isAuthenticated ? '/chat' : '/auth'}
           className="rounded-full border border-primary px-5 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-bg"
         >
-          {isAuthenticated ? '대시보드' : '로그인/회원가입'}
+          {isAuthenticated ? '대시보드' : '로그인 / 회원가입'}
         </Link>
       </div>
     </header>

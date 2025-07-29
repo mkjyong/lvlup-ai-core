@@ -15,6 +15,7 @@ from typing import Callable, Awaitable, Optional
 
 import httpx
 from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # 최소 매핑 테이블 (필요 시 확장)
 COUNTRY_TO_LOL_REGION: dict[str, str] = {
@@ -35,14 +36,15 @@ COUNTRY_TO_LOL_REGION: dict[str, str] = {
 _GEOIP_ENDPOINT = "https://ipapi.co/{ip}/json/"
 
 
-class GeoIPMiddleware:
+class GeoIPMiddleware(BaseHTTPMiddleware):
     """GeoIP 국가 코드를 추정하여 request.state 에 저장한다."""
 
     def __init__(self, app, *, timeout: float = 0.5):
-        self.app = app
         self.timeout = timeout
+        super().__init__(app, dispatch=self.dispatch)
 
-    async def __call__(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]):  # type: ignore[override]
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Inject geo_country & suggested_lol_region into request.state."""
         client_ip = _get_client_ip(request)
         country_code: Optional[str] = None
 

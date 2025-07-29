@@ -16,7 +16,6 @@ celery==5.3.4
 redis==5.0.4 
 openai==1.23.6
 prometheus-fastapi-instrumentator==6.1.0 
-aioredis==2.0.2 
 pgvector==0.2.5 
 aiolimiter==1.1.0
 google-auth-oauthlib==1.2.0 

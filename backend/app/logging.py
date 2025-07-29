@@ -40,5 +40,5 @@ def init_logging(force: bool = False) -> None:  # noqa: D401
         cache_logger_on_first_use=True,
     )
 
-    # 표준 로깅 핸들러도 structlog에 위임
-    logging.basicConfig(level=_get_log_level(), handlers=[structlog.stdlib.ProcessorFormatter.wrap_for_handler(structlog.processors.JSONRenderer())]) 
+    # 표준 로깅은 structlog가 이미 JSON 문자열을 출력하므로 그대로 전달
+    logging.basicConfig(level=_get_log_level(), format="%(message)s", stream=sys.stdout) 

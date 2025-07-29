@@ -12,6 +12,7 @@ import time
 from contextlib import contextmanager
 from typing import Iterator
 
+import logging
 from prometheus_client import Counter, Histogram, Gauge, start_http_server, exposition
 from wsgiref.simple_server import make_server
 
@@ -71,8 +72,18 @@ def init_metrics() -> None:
     if _metrics_started:
         return
     port = int(os.getenv("METRICS_PORT", "8000"))
-    # Start prometheus exporter
-    start_http_server(port)
+    # Start prometheus exporter – tolerate address in use
+    try:
+        start_http_server(port)
+        bound_port = port
+    except OSError as exc:
+        import errno
+
+        if exc.errno == errno.EADDRINUSE:
+            logger.warning("Metrics port %s already in use; skipping exporter", port)
+            bound_port = None
+        else:
+            raise
 
     # Simple healthcheck endpoint on /healthz using wsgi server
     def _health_app(environ, start_response):  # type: ignore[return-type]
@@ -82,8 +93,14 @@ def init_metrics() -> None:
         # fallback to prometheus app
         return exposition.make_wsgi_app()(environ, start_response)
 
+    if bound_port is not None:
+        health_port = bound_port + 1
+    else:
+        # Fallback health port to 0 (OS pick) to avoid clash
+        health_port = 0
+
     def _run_server():
-        srv = make_server("0.0.0.0", port + 1, _health_app)
+        srv = make_server("0.0.0.0", health_port, _health_app)
         srv.serve_forever()
 
     import threading  # noqa: WPS433

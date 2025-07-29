@@ -188,3 +188,8 @@ async def _handle_row(row, min_score: float, dry_run: bool, source: str | None =
     except Exception as exc:  # noqa: BLE001
         logger.warning("Vector Store 업로드 실패 doc %s: %s", doc_id, exc)
         return False 
+
+if __name__ == "__main__":
+    # Allow running via `python scripts/adhoc_run.py ...` or
+    # `python -m data_ingest.scripts.adhoc_run ...`
+    app() 

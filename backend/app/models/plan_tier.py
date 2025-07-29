@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy.orm import Mapped
 
 from sqlmodel import Field, SQLModel, Relationship
 
@@ -18,4 +19,11 @@ class PlanTier(SQLModel, table=True):
     special_monthly_request_limit: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    users: list["UserPlan"] = Relationship(back_populates="plan") 
+    # SQLAlchemy 2.x / SQLModel requires typing.List for forward refs using annotations future
+    users: list["UserPlan"] = Relationship(back_populates="plan")
+
+# Runtime import to populate SQLAlchemy registry
+if TYPE_CHECKING:
+    from .user_plan import UserPlan  # pragma: no cover
+else:
+    from . import user_plan  # noqa: F401 

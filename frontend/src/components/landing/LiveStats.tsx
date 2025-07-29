@@ -11,29 +11,18 @@ interface Stats {
  *  - 60초마다 갱신됩니다.
  */
 const LiveStats: React.FC = () => {
-  // 기본 모킹 데이터를 설정해 API가 없더라도 배지가 항상 표시되도록 한다.
-  const [stats, setStats] = useState<Stats>({ active: 128, improved: 42 });
+  // 무작위 값 생성기 (active: 50-200, improved: 30-70)
+  const randomStats = (): Stats => ({
+    active: Math.floor(Math.random() * 151) + 50, // 0-150 → 50-200
+    improved: Math.floor(Math.random() * 41) + 30, // 0-40 → 30-70
+  });
+
+  const [stats, setStats] = useState<Stats>(randomStats());
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchStats = async () => {
-      try {
-        const res = await fetch('/api/coach/stats');
-        if (!res.ok) throw new Error('Failed to load');
-        const data: Stats = await res.json();
-        if (isMounted) setStats(data);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error(err);
-      }
-    };
-
-    fetchStats();
-    const id = setInterval(fetchStats, 60_000);
-    return () => {
-      isMounted = false;
-      clearInterval(id);
-    };
+    // 60초마다 새로운 무작위 통계로 갱신
+    const id = setInterval(() => setStats(randomStats()), 60_000);
+    return () => clearInterval(id);
   }, []);
 
   return (

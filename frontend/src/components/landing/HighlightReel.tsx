@@ -33,7 +33,7 @@ const clips: Clip[] = [
 ];
 
 const HighlightReel: React.FC = () => (
-  <section className="relative -mt-16 bg-[#0a0a0d] py-24 text-white">
+  <section className="relative mt-0 bg-[#0a0a0d] py-24 text-white">
     {/* top fade to connect previous section */}
     <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-transparent to-[#0a0a0d]" />
     <div className="container mx-auto px-4">

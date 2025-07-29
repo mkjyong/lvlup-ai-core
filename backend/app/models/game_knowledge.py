@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, UniqueConstraint
+from sqlalchemy import Column, UniqueConstraint, Float, JSON  # type: ignore
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, SQLModel
 
@@ -18,9 +18,9 @@ class GameKnowledge(SQLModel, table=True):
     chunk_id: int = 0  # 원본 문서 내 청크 순번
     text: str
     # pgvector 확장 사용 시 ARRAY → vector 타입으로 마이그레이션
-    embedding: List[float] = Field(sa_column=Column(ARRAY(type_=float)))
+    embedding: List[float] = Field(sa_column=Column(ARRAY(Float)))
     score: float = Field(ge=0, le=1)
-    metadata: dict | None = None
+    meta: dict | None = Field(default=None, alias="metadata", sa_column=Column(JSON))
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     __table_args__ = (

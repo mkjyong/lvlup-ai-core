@@ -22,6 +22,7 @@ from data_ingest.common.logger import logger
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 PG_CONN_STR = os.getenv("PG_CONN_STR", "postgresql://postgres:postgres@localhost:5432/postgres")
+PG_SSL_MODE = os.getenv("PG_SSL_MODE")  # e.g. "require" for Supabase deployments
 
 
 async def _apply_migration(conn: asyncpg.Connection, sql_path: Path) -> None:
@@ -37,7 +38,10 @@ async def run_migrations() -> None:
         return
 
     logger.info("Connecting to Postgres %s", PG_CONN_STR)
-    async with asyncpg.create_pool(dsn=PG_CONN_STR) as pool:
+    pool_kwargs = {"dsn": PG_CONN_STR}
+    if PG_SSL_MODE:
+        pool_kwargs["ssl"] = PG_SSL_MODE
+    async with asyncpg.create_pool(**pool_kwargs) as pool:
         async with pool.acquire() as conn:
             for f in sql_files:
                 await _apply_migration(conn, f)

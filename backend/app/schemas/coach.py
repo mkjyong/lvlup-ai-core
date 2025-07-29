@@ -52,7 +52,7 @@ lol_coach_schema = {
                 },
                 "lane": {
                     "type": ["string", "null"],
-                    "enum": ["top", "jungle", "mid", "adc", "support", null],
+                    "enum": ["top", "jungle", "mid", "adc", "support", None],
                 },
                 "champion_tips": {"type": "array", "items": {"type": "string"}},
                 "objective_focus": {"type": "string"},

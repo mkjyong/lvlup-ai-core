@@ -18,25 +18,47 @@ from data_ingest.common.metrics import UPSERT_LATENCY_SECONDS
 import asyncpg
 
 PG_CONN_STR = os.getenv("PG_CONN_STR", "postgresql://postgres:postgres@localhost:5432/postgres")
+PG_SSL_MODE = os.getenv("PG_SSL_MODE")  # e.g. "require" for Supabase, "disable" for local
 
 
 class Database:
     """AsyncPG 기반 단일톤 커넥션 풀."""
 
     def __init__(self, dsn: str = PG_CONN_STR, min_size: int = 1, max_size: int = 10):
-        self._dsn = dsn
+        self._dsn = self._normalize_dsn(dsn)
         self._min_size = min_size
         self._max_size = max_size
         self._pool: asyncpg.Pool | None = None
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_dsn(dsn: str) -> str:  # noqa: D401
+        """Convert SQLAlchemy-style DSN (postgresql+asyncpg://) → asyncpg DSN.
+
+        asyncpg expects schemes like ``postgresql://`` or ``postgres://``.
+        If a driver suffix exists (e.g. ``+asyncpg``), it is stripped.
+        """
+
+        import re
+
+        return re.sub(r"^postgresql\+[a-zA-Z0-9_]+://", "postgresql://", dsn)
+
     async def init(self) -> None:
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(
+            pool_kwargs = dict(
                 dsn=self._dsn,
                 min_size=self._min_size,
                 max_size=self._max_size,
                 command_timeout=60,
             )
+            # Enable SSL if PG_SSL_MODE is set (recommended for Supabase)
+            if PG_SSL_MODE:
+                pool_kwargs["ssl"] = PG_SSL_MODE
+
+            self._pool = await asyncpg.create_pool(**pool_kwargs)
 
     async def close(self) -> None:
         if self._pool is not None:
