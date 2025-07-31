@@ -3,10 +3,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { v4 as uuid } from 'uuid';
 import ChatBubble, { ChatMessage } from '../components/ChatBubble';
 import GameToggle from '../components/GameToggle';
+import SessionSidebar from '../components/SessionSidebar';
 import AccountBar from '../components/AccountBar';
 import { useGameIds } from '../hooks/useGameIds';
-import api from '../api/client';
-import { useChatStream } from '../hooks/useChatStream';
+import { useChatSession } from '../hooks/useChatSession';
+import { useChatStore } from '../stores/chat';
 
 const ChatPage: React.FC = () => {
   const location = useLocation();
@@ -16,6 +17,7 @@ const ChatPage: React.FC = () => {
   const nicknameRef = useRef<string | null>(urlParams.get('nick'));
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { current } = useChatStore();
   const [input, setInput] = useState(initialQuestion);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -26,7 +28,7 @@ const ChatPage: React.FC = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Streaming hook ---------------------------------------------
-  const { text: streamText, start: startStream } = useChatStream();
+  const { streamText, start: startStream } = useChatSession();
   const assistantMessageIdRef = useRef<string | null>(null);
 
   // helper to add files with limit
@@ -78,18 +80,6 @@ const ChatPage: React.FC = () => {
 
     const imageUrls = imageFiles.map((f) => URL.createObjectURL(f));
 
-    // base64 변환
-    const base64List: string[] = await Promise.all(
-      imageFiles.map(
-        (file) =>
-          new Promise<string>((resolve, reject) => {
-            const r = new FileReader();
-            r.onloadend = () => resolve(r.result as string);
-            r.onerror = reject;
-            r.readAsDataURL(file);
-          }),
-      ),
-    );
 
     const userMsg: ChatMessage = {
       id: uuid(),
@@ -106,7 +96,10 @@ const ChatPage: React.FC = () => {
     setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', text: '...' }]);
 
     try {
-      startStream({ question: userMsg.text ?? '', game: game === 'general' ? undefined : game });
+      await startStream({
+        text: userMsg.text ?? '',
+        files: imageFiles,
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(error);
@@ -126,6 +119,18 @@ const ChatPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 세션 변경 시 히스토리 로드
+  useEffect(() => {
+    if (!current?.id) return;
+    (async () => {
+      const list = await fetch(`/chat/messages?session_id=${current.id}`, {
+        credentials: 'include',
+      }).then((r) => r.json());
+      const mapped: ChatMessage[] = list.map((m: any) => ({ id: uuid(), role: m.role, text: m.text }));
+      setMessages(mapped);
+    })();
+  }, [current?.id]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -142,8 +147,9 @@ const ChatPage: React.FC = () => {
 
 
   return (
-    <div
-      className={`flex h-full flex-col bg-bg text-text ${isDragging ? 'ring-4 ring-primary/40' : ''}`}
+   <div className={`flex h-full bg-bg text-text ${isDragging ? 'ring-4 ring-primary/40' : ''}`}>
+     <SessionSidebar />
+     <div className="flex flex-1 flex-col"
       onDragOver={(e) => {
         e.preventDefault();
       }}
@@ -264,6 +270,7 @@ const ChatPage: React.FC = () => {
         </button>
       </form>
     </div>
+  </div>
   );
 };
 

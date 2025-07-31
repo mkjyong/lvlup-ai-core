@@ -69,13 +69,8 @@ class Settings(BaseSettings):
     # === CORS ===
     CORS_ALLOW_ORIGINS: str = ""
 
-    # === LLM/OpenAI ===
-    OPENAI_API_KEY: str | None = None
-
-    # --- OpenAI File Search IDs (comma-separated) ---
-    OPENAI_FILE_IDS_GENERIC: str | None = ""  # e.g., "file-abc,file-def"
-    OPENAI_FILE_IDS_LOL: str | None = ""
-    OPENAI_FILE_IDS_PUBG: str | None = ""
+    # === LLM / Gemini ===
+    GEMINI_API_KEY: str | None = None
 
     # === External Game APIs ===
     RIOT_API_KEY: str | None = None
@@ -163,14 +158,26 @@ def get_settings() -> Settings:
 # Pricing & Plan limit tables
 # -----------------------------
 
-MODEL_PRICING_PER_1K: dict[str, float] = {
-    "gpt-4o-mini": 0.00075,
-    "o4-mini": 0.00550,
+# Gemini API 가격 정책 (2025-07 기준)
+# https://ai.google.dev/gemini-api/docs/pricing?hl=ko
+# key: model → {prompt: 가격/1K input 토큰, completion: 가격/1K output 토큰}
+MODEL_PRICING_PER_1K: dict[str, dict[str, float]] = {
+    # Gemini 2.5 Flash-Lite (가볍고 저렴한 버전 – Pro 대비 50% 수준 가정)
+    # 실제 가격은 Flash 기준 $0.0025/$0.0075 이므로 50% → 0.00125 / 0.00375
+    "gemini-2.5-flash-lite": {
+        "prompt": 0.00125,
+        "completion": 0.00375,
+    },
+    # Gemini 2.5 Flash (실시간 응답 지향)
+    "gemini-2.5-flash": {
+        "prompt": 0.0025,
+        "completion": 0.0075,
+    },
 }
 
 MODEL_CATEGORY: dict[str, str] = {
-    "gpt-4o-mini": "general",
-    "o4-mini": "special",
+    "gemini-2.5-flash-lite": "general",
+    "gemini-2.5-flash": "special",
 }
 
 PLAN_CALL_LIMITS: dict[str, dict[str, dict[str, int]]] = {

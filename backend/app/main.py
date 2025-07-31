@@ -79,6 +79,8 @@ def create_app() -> FastAPI:
     app.include_router(user_router.router)
     app.include_router(performance_router.router)
     app.include_router(assets_router.router)
+    from app.routers import chat as chat_router
+    app.include_router(chat_router.router)
 
     # Simple email/password mock router (primarily for tests)
     from app.routers import auth_mock as auth_mock_router  # type: ignore

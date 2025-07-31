@@ -1,56 +1,50 @@
-"""Reusable Prompt ID 관리 서비스.
+"""System prompt 관리 서비스 (Google Gemini).
 
-이 프로젝트는 이제 시스템 프롬프트를 OpenAI Responses API에 등록하고
-`prompt_id` 로만 참조합니다. 기존 Jinja2 템플릿 로직은 삭제되었습니다.
+Google Gemini API 는 OpenAI 의 reusable prompt ID 기능을 지원하지 않으므로
+시스템 프롬프트를 코드 내부 상수로 관리한다. 버저닝은 아직 필요 없으며,
+현재는 목업 텍스트를 사용한다.
 """
 
-from typing import Any, Optional
 from enum import Enum
-import os
+from typing import Any, Dict
 
 
 class PromptType(str, Enum):
-    """Supported prompt categories → env var mapping keys."""
-
     lol = "lol"
     pubg = "pubg"
     generic = "generic"
 
 
 # ---------------------------------------------------------------------------
-# Reusable Prompt ID helpers
+# System Prompt 텍스트
 # ---------------------------------------------------------------------------
 
-_PROMPT_ENV_MAP = {
-    PromptType.generic: "PROMPT_ID_GENERIC",
-    PromptType.lol: "PROMPT_ID_LOL",
-    PromptType.pubg: "PROMPT_ID_PUBG",
+_PROMPT_TEXTS: Dict[PromptType, str] = {
+    PromptType.generic: "You are a professional esports coach. (mock system prompt)",
+    PromptType.lol: "You are a professional League of Legends coach. (mock system prompt)",
+    PromptType.pubg: "You are a professional PUBG coach. (mock system prompt)",
 }
 
 
-def get_prompt_id(ptype: "PromptType") -> Optional[str]:  # noqa: D401
-    """Return reusable prompt_id for given prompt type.
-
-    If the corresponding env variable is unset, returns ``None`` so that the
-    caller can decide whether to raise or handle the error.
-    """
-
-    env_key = _PROMPT_ENV_MAP.get(ptype)
-    return os.getenv(env_key) if env_key else None
+def get_system_prompt(ptype: "PromptType") -> str:  # noqa: D401
+    """Return the system prompt text for the given prompt type."""
+    return _PROMPT_TEXTS.get(ptype, _PROMPT_TEXTS[PromptType.generic])
 
 
 # ---------------------------------------------------------------------------
-# Legacy API stubs (safety)
+# Legacy stubs (backward compatibility)
 # ---------------------------------------------------------------------------
+
+def get_prompt_id(ptype: "PromptType"):
+    """Deprecated – kept for backward compatibility."""
+    return None
 
 
 def render(*_args: Any, **_kwargs: Any):  # type: ignore[return-value]
     """Deprecated stub – Prompt rendering via Jinja2 is removed."""
-
-    raise RuntimeError("render() is deprecated. Use reusable prompt_id instead.")
+    raise RuntimeError("render() is deprecated. Use system prompt text instead.")
 
 
 def token_guard(prompt: str, *_args: Any, **_kwargs: Any) -> str:  # noqa: D401
     """No-op token guard maintained for backward compatibility."""
-
-    return prompt 
+    return prompt

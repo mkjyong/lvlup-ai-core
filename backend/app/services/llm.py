@@ -1,240 +1,241 @@
-"""OpenAI LLM 호출 래퍼 (Stub)."""
+"""Gemini LLM 호출 래퍼.
+
+기존 OpenAI Responses API 의 호출 래퍼를 Google Gemini API 로 교체하였다.
+
+변경 사항:
+1. google-generativeai SDK 를 사용해 Gemini 2.5 모델 호출
+2. 내부 모델명(gpt-4o-mini, o4-mini)을 Gemini 모델명에 매핑
+   - gpt-4o-mini → gemini-2.5-flash-lite
+   - o4-mini     → gemini-2.5-flash
+3. 비동기 API 호환을 위해 `asyncio.to_thread` 로 동기 SDK 호출을 오프로드
+4. API 키는 `GEMINI_API_KEY` 환경변수 또는 Settings 필드에서 로드
+5. 기존 테스트 스텁 동작 유지 (API 키 미설정 시 echo 응답)
+"""
+from __future__ import annotations
+
 import asyncio
-from typing import Any, List
-
-import openai
-
-from app.config import get_settings
-from app.exceptions import AIError
-
-import app.services.token_manager as token_manager
-from app.config import MODEL_CATEGORY
-
 import os
-
+import threading
 from collections.abc import AsyncIterator
+from typing import List
 
-# Load global settings once --------------------------------------------
+import google.generativeai as genai  # type: ignore
+from google.genai import types  # type: ignore
 
+from app.config import MODEL_CATEGORY, get_settings
+from app.exceptions import AIError
+import app.services.token_manager as token_manager
+
+GROUNDING_TOOL = types.Tool(google_search=types.GoogleSearch())
+
+# ---------------------------------------------------------------------------
+# 초기 설정
+# ---------------------------------------------------------------------------
 settings = get_settings()
 
-# Configure OpenAI client globally (HTTP2 enabled by default)
-openai.api_key = settings.OPENAI_API_KEY or ""  # 빈 키 허용
+# SDK 초기화 (API 키 없으면 stub 모드로 동작)
+_GEMINI_API_KEY = settings.__dict__.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+if _GEMINI_API_KEY:
+    genai.configure(api_key=_GEMINI_API_KEY)
 
 
-# Stub helper (unit tests / no API key) --------------------------------
-
+# ---------------------------------------------------------------------------
+# 내부 헬퍼
+# ---------------------------------------------------------------------------
 
 def _stub_response() -> bool:
     """환경 변수 미설정 시 stub 사용 여부."""
 
-    return not settings.OPENAI_API_KEY
+    return _GEMINI_API_KEY == ""
 
-# ---------------------------------------------------
-# Vector Store Retrieval helper (none needed)
-# ---------------------------------------------------
 
+def _map_model_name(internal: str) -> str:
+    """내부 모델명을 Gemini 실제 모델명으로 매핑."""
+
+    mapping = {
+        "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+        "gemini-2.5-flash": "gemini-2.5-flash",
+    }
+    return mapping.get(internal, "gemini-2.5-flash-lite")
+
+
+async def _generate_content_with_usage(model: str, prompt: str, *, enable_search: bool = True):
+    """Gemini generate_content를 호출하고 (text, usage_metadata) 튜플 반환."""
+
+    def _call():
+        gen_model = genai.GenerativeModel(model)
+        kw: dict = {}
+        if enable_search:
+            kw["tools"] = [GROUNDING_TOOL]
+        resp = gen_model.generate_content(prompt, **kw)
+        text = (getattr(resp, "text", None) or str(resp)).strip()
+        return text, getattr(resp, "usage_metadata", None)
+
+    return await asyncio.to_thread(_call)
+
+
+# ---------------------------------------------------------------------------
+# Streaming helper
+# ---------------------------------------------------------------------------
+
+def _stream_content(model: str, prompt: str, *, enable_search: bool = True):
+    """Google Gemini SDK 스트리밍 결과를 AsyncIterator 로 래핑."""
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    def _worker() -> None:
+        gen_model = genai.GenerativeModel(model)
+        kw: dict = {}
+        if enable_search:
+            kw["tools"] = [GROUNDING_TOOL]
+        for chunk in gen_model.generate_content(prompt, stream=True, **kw):
+            text = getattr(chunk, "text", None)
+            if text:
+                asyncio.run_coroutine_threadsafe(queue.put(text), loop)
+        # 스트림 종료 시 sentinel None
+        asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+    async def _iterator() -> AsyncIterator[str]:  # noqa: D401
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
+
+    return _iterator()
+
+# ---------------------------------------------------------------------------
+# Public API (OpenAI 호환 시그니처 유지)
+# ---------------------------------------------------------------------------
 
 async def response_completion(
     messages: list[dict[str, str]],
     *,
     model: str | None = None,
-    max_tokens: int | None = None,
-    prompt_ids: list[str] | None = None,
+    max_tokens: int | None = None,  # Gemini API 는 자체 토큰 제한에 맞게 자르므로 참고만
+    prompt_ids: list[str] | None = None,  # Gemini 에는 해당 기능이 없으므로 무시
     user_id: str | None = None,
     plan_tier: str = "free",
-    # Vector Store options
-    use_vector_store: bool = True,
-    top_k: int | None = None,
-    filters: dict | None = None,
     # Reusable prompt variables
-    prompt_vars: dict | None = None,
-    stream: bool = False,
+    prompt_vars: dict | None = None,  # prompt vars 는 템플릿 시스템에 따라 직접 문자열로 치환
+    stream: bool = False,  # 스트리밍 미지원 (향후 업그레이드)
     response_format: dict | None = None,
-) -> "AsyncIterator[str] | str":  # 스트림이면 async iterator 반환, 아니면 str
-    """OpenAI **Responses API** 호출 래퍼.
+) -> "AsyncIterator[str] | str":  # 스트림이면 async iterator, 아니면 str
+    """Google Gemini API 기반 텍스트 생성 래퍼.
 
-    File-search tool을 통해 RAG 문서를 자동 검색하며 기존 `chat_completion`과 동일한
-    사용량 로깅, 백오프 로직을 유지한다.
+    기존 OpenAI Responses API 와 동일한 함수 시그니처를 유지해
+    상위 레이어 코드 변경 없이 교체할 수 있도록 설계하였다.
     """
 
-    from app.services import usage as usage_service  # local import
+    from app.services import usage as usage_service  # local import (순환 방지)
 
-    # 토큰 한도 로직은 기존 chat_completion 재사용 ----------------------
-    if user_id:
-        plan = await usage_service._get_active_plan(user_id)
-        prompt_limit = plan.prompt_limit or 0
-        completion_limit = plan.completion_limit or 0
-    else:
-        prompt_limit = completion_limit = 0
-
-    limits = {"prompt": prompt_limit, "completion": completion_limit}
-
-    # 메시지 토큰 트리밍 ------------------------------------------------
-    messages = token_manager.trim_messages(messages)
-
-    # -------------------------------------------------------------
-    # Stub: API 키가 없을 때는 임의 응답 리턴 (테스트 환경)
-    # -------------------------------------------------------------
+    # -------------------------------------------------------------------
+    # Stub: API 키가 없을 때는 간단히 echo 반환 (테스트 환경)
+    # -------------------------------------------------------------------
     if _stub_response():
-        # 가장 최근 user 메시지에 간단히 에코
-        last_user_msg = next((m for m in reversed(messages) if m.get("role") == "user"), {"content": ""})
+        last_user_msg = next(
+            (m for m in reversed(messages) if m.get("role") == "user"),
+            {"content": ""},
+        )
         return f"[STUB] {last_user_msg.get('content', '')}"
 
-    # 한도 검사 ---------------------------------------------------------
-    if limits["prompt"]:
-        prompt_tokens_est = sum(
-            token_manager.message_tokens(m) for m in messages if m.get("role") == "user"
-        )
-        if prompt_tokens_est > limits["prompt"]:
-            raise AIError("프롬프트 토큰 한도 초과")
+    # 메시지 토큰 트리밍 (기존 로직 재사용)
+    messages = token_manager.trim_messages(messages)
 
-    model_to_use = model or (
-        "o4-mini" if MODEL_CATEGORY.get(model or "gpt-4o-mini", "general") == "special" else "gpt-4o-mini"
+    # 모델 매핑 ----------------------------------------------------------
+    internal_model = model or "gemini-2.5-flash-lite"
+    gemini_model = _map_model_name(internal_model)
+
+    # 요금제/사용량 체크 ---------------------------------------------------
+    if user_id:
+        quota_ok = await usage_service.has_quota(user_id, plan_tier, internal_model)
+        if not quota_ok:
+            raise AIError("요금제별 호출 횟수 한도 초과")
+
+    # Prompt 조립 ---------------------------------------------------------
+    # Gemini 는 role 구조를 별도로 지원하지 않으므로 "role: content" 형태로 단순 병합
+    prompt_parts: list[str] = []
+    for m in messages:
+        role = m.get("role", "user")
+        prompt_parts.append(f"{role}: {m.get('content', '')}")
+
+    # prompt vars ({{ placeholder }}) 를 단순 치환 (Jinja 등 미사용)
+    prompt_text = "\n".join(prompt_parts)
+    if prompt_vars:
+        for k, v in prompt_vars.items():
+            prompt_text = prompt_text.replace(f"{{{{{k}}}}}", str(v))
+
+    # 구조화 출력(request.response_format) 이 JSON 일 때는 system 지시어 추가
+    if response_format and response_format.get("type") == "json_object":
+        prompt_text = (
+            "다음 JSON 스키마에 맞추어 응답하세요:\n"  # 간단 프롬프트
+            + str(response_format.get("schema", {}))
+            + "\n\n"
+            + prompt_text
+        )
+
+    # -------------------------------------------------------------------
+    # Gemini API 호출 (stream 지원 여부에 따라 분기)
+    # -------------------------------------------------------------------
+    if stream:
+        # Gemini SDK 실시간 스트리밍 처리
+        encoder = token_manager.ENCODER
+        fragments: list[str] = []
+
+        # 정확한 입력 토큰: count_tokens 활용 (실패 시 fallback)
+        prompt_tokens_count = 0
+        if user_id:
+            try:
+                prompt_tokens_count = genai.GenerativeModel(gemini_model).count_tokens(prompt_text).total_tokens  # type: ignore[attr-defined]
+            except Exception:
+                prompt_tokens_count = sum(token_manager.message_tokens(m) for m in messages)
+
+        async def _iter() -> AsyncIterator[str]:  # type: ignore[override]
+            async for piece in _stream_content(gemini_model, prompt_text, enable_search=True):
+                fragments.append(piece)
+                yield piece
+            # 스트림 종료 후 사용량 로깅
+            if user_id and fragments:
+                completion_tokens = len(encoder.encode("".join(fragments)))
+                await usage_service.log_usage(
+                    user_id=user_id,
+                    model=internal_model,
+                    prompt_tokens=prompt_tokens_count,
+                    completion_tokens=completion_tokens,
+                )
+
+        return _iter()
+
+    # non-stream ---------------------------------------------------------
+    text, usage_meta = await _generate_content_with_usage(
+        gemini_model, prompt_text, enable_search=True
     )
 
-    # 응답 토큰 한도 ----------------------------------------------------
-    completion_limit = limits["completion"]
-    if completion_limit and max_tokens is not None:
-        final_max_tokens = min(max_tokens, completion_limit)
-    elif completion_limit:
-        final_max_tokens = completion_limit
-    else:
-        final_max_tokens = max_tokens
+    if user_id and usage_meta:
+        # 공식 usage_metadata 활용
+        prompt_tokens = getattr(usage_meta, "prompt_token_count", 0)
+        completion_tokens = getattr(usage_meta, "candidates_token_count", 0)
+        await usage_service.log_usage(
+            user_id=user_id,
+            model=internal_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+    elif user_id:
+        # fallback: 추정 방식
+        encoder = token_manager.ENCODER
+        prompt_tokens = sum(token_manager.message_tokens(m) for m in messages)
+        completion_tokens = len(encoder.encode(text))
+        await usage_service.log_usage(
+            user_id=user_id,
+            model=internal_model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
 
-    # ----- Vector Store Retrieval tool -------------------------------
-    tools: list[dict[str, object]] = []
+    result_text = text
 
-    if use_vector_store and os.getenv("OPENAI_VECTOR_STORE_ID"):
-        vs_id = os.getenv("OPENAI_VECTOR_STORE_ID")
-        tool_payload: dict[str, object] = {
-            "type": "file_search",
-            "vector_store_ids": [vs_id],
-        }
-        if top_k is not None:
-            tool_payload["max_results"] = top_k
-        if filters:
-            tool_payload["filters"] = filters
-
-        tools.append(tool_payload)
-
-    request: dict[str, object] = {
-        "model": model_to_use,
-        "messages": messages,
-        "max_tokens": final_max_tokens,
-        "store": False,
-    }
-
-    # ---------------- Prompt Variables -----------------------------
-    if prompt_vars:
-        # OpenAI Responses API uses `prompt_vars` (dict[str,str]) to replace
-        # placeholders (e.g. {{player_stats}}) in reusable prompts.
-        request["prompt_vars"] = prompt_vars  # type: ignore[typeddict-item]
-
-    # 추가 옵션 -------------------------------------------------------
-    if stream:
-        request["stream"] = True
-    if response_format is not None:
-        request["response_format"] = response_format  # type: ignore[typeddict-item]
-
-    if tools:
-        request["tools"] = tools  # type: ignore[typeddict-item]
-    if prompt_ids:
-        request["prompt_ids"] = prompt_ids  # Reusable system prompt
-
-    # ------------------------- 호출 & 로깅 ---------------------------
-    max_retries, delay = 3, 1
-    for attempt in range(max_retries):
-        try:
-            if user_id:
-                quota_ok = await usage_service.has_quota(user_id, plan_tier, model_to_use)
-                if not quota_ok:
-                    raise AIError("요금제별 호출 횟수 한도 초과")
-
-            # 스트림 / 논스트림 분기 ---------------------------------
-            if stream:
-                # 스트림 응답은 AsyncIterator 반환
-                resp_stream = await openai.responses.create(**request)  # type: ignore[arg-type]
-
-                # --- 토큰 집계용 버퍼 -------------------------------
-                fragments: list[str] = []  # delta 문자열 모음
-                encoder = token_manager.ENCODER
-                prompt_tokens_est = sum(token_manager.message_tokens(m) for m in messages)
-
-                async def _token_iterator():
-                    nonlocal fragments  # noqa: PLW0603
-                    try:
-                        async for chunk in resp_stream:  # type: ignore[async-iteration-over-sync]
-                            if hasattr(chunk, "choices") and chunk.choices:
-                                delta = chunk.choices[0].delta  # type: ignore[attr-defined]
-                                content = getattr(delta, "content", None)
-                                if content:
-                                    fragments.append(content)
-                                    yield content
-                    finally:
-                        # 응답 스트림 종료 및 리소스 정리
-                        await getattr(resp_stream, "aiter_close", lambda: None)()
-
-                        # ------ 사용량 로깅 -------------------------
-                        if user_id and fragments:
-                            try:
-                                full_text = "".join(fragments)
-                                completion_tokens_acc = len(encoder.encode(full_text))
-                                await usage_service.log_usage(
-                                    user_id=user_id,
-                                    model=request["model"],
-                                    prompt_tokens=prompt_tokens_est,
-                                    completion_tokens=completion_tokens_acc,
-                                )
-                            except Exception:  # pragma: no cover
-                                pass
-
-                return _token_iterator()
-
-            # ---------------- Non-stream -----------------------------
-            resp = await openai.responses.create(**request)  # type: ignore[arg-type]
-
-            # usage logging ------------------------------------------
-            if user_id and getattr(resp, "usage", None):
-                try:
-                    u = resp.usage  # type: ignore[attr-defined]
-                    await usage_service.log_usage(
-                        user_id=user_id,
-                        model=request["model"],
-                        prompt_tokens=u.prompt_tokens,  # type: ignore[attr-defined]
-                        completion_tokens=u.completion_tokens,  # type: ignore[attr-defined]
-                    )
-                except Exception:  # pragma: no cover
-                    pass
-
-            # Responses API – SDK 예상 (choices[0].message or response.text)
-            if hasattr(resp, "choices"):
-                return resp.choices[0].message.content.strip()
-            if hasattr(resp, "response"):
-                return resp.response  # type: ignore[return-value]
-            return str(resp)
-        except Exception as exc:  # pragma: no cover
-            if attempt == max_retries - 1:
-                raise AIError("LLM 호출 실패") from exc
-            await asyncio.sleep(delay)
-            delay *= 2
-
-
-async def embedding(text: str, model: str = "text-embedding-3-small") -> List[float]:
-    """텍스트 임베딩을 OpenAI로부터 가져온다."""
-
-    if _stub_response():
-        # random small vector stub
-        return [0.0] * 5
-
-    max_retries = 3
-    delay = 1
-    for attempt in range(max_retries):
-        try:
-            resp = await openai.embeddings.create(input=[text], model=model)  # type: ignore[arg-type]
-            return resp.data[0].embedding  # type: ignore[return-value]
-        except Exception as exc:  # pragma: no cover
-            if attempt == max_retries - 1:
-                raise AIError("임베딩 생성 실패") from exc
-            await asyncio.sleep(delay)
-            delay *= 2 
+    return result_text

@@ -58,6 +58,14 @@ class Database:
             port_part = f":{parsed.port}" if parsed.port else ""
             netloc = f"{userinfo}@localhost{port_part}"
             dsn = urllib.parse.urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+        # Strip SSL-related query parameters that asyncpg does not recognise (e.g. sslmode=require, ssl=true)
+        parsed_query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        filtered_query = [(k, v) for k, v in parsed_query if k not in {"sslmode", "ssl"}]
+        if len(filtered_query) != len(parsed_query):
+            # Rebuild URL without unsupported params
+            new_query = urllib.parse.urlencode(filtered_query)
+            parsed = parsed._replace(query=new_query)
+            dsn = urllib.parse.urlunsplit(parsed)
         return dsn
 
     async def init(self) -> None:

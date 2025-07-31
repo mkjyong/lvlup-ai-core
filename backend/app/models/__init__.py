@@ -9,4 +9,6 @@ from .referral import Referral  # noqa: F401
 from .game_knowledge import GameKnowledge  # noqa: F401 
 from .game_account import GameAccount  # noqa: F401
 from .match_cache import MatchCache  # noqa: F401
-from .performance_stats import PerformanceStats  # noqa: F401 
+from .performance_stats import PerformanceStats  # noqa: F401
+from .chat_session import ChatSession  # noqa: F401
+from .chat import ChatMessage  # noqa: F401 

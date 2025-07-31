@@ -13,7 +13,7 @@ from app.services import usage as usage_service
 from app.orchestrators.rag import RagPipeline
 from app.services import chat as chat_service
 from app.deps import get_current_user
-from app.config import MODEL_CATEGORY
+
 from app.models.plan_tier import PlanTier
 from app.models.db import get_session
 from sqlmodel import select
@@ -65,7 +65,7 @@ async def ask_endpoint(payload: AskRequest, response: Response, user: User = Dep
     await chat_service.save_chat(user.google_sub, payload.question, answer, game=payload.game)
 
     # --- 헤더: 남은 호출 한도 ---------------------------
-    category = MODEL_CATEGORY.get("o4-mini" if (payload.game and payload.game.lower() in {"lol", "pubg"}) else "gpt-4o-mini", "general")
+    category = "special" if (payload.game and payload.game.lower() in {"lol", "pubg"}) else "general"
 
     async with get_session() as session:
         stmt = (
@@ -98,7 +98,7 @@ async def ask_stream_endpoint(
 
     async def event_generator():
         pipeline = RagPipeline()
-        stream_iter = await pipeline.run_structured_and_stream(
+        stream_iter = await pipeline.run_and_stream(
             question=payload.question,
             user_id=user.google_sub,
             plan_tier=user.plan_tier,

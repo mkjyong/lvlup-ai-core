@@ -47,38 +47,6 @@ async def monthly_usage_count(user_id: str) -> int:
 
     return count
 
-
-async def weekly_usage_count(user_id: str) -> int:
-    """주간 사용량을 Redis 캐시 → DB 순으로 조회."""
-    now = datetime.utcnow()
-    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    r = get_redis()
-    key = f"usage:{user_id}:week:{week_start.strftime('%Y%m%d')}"
-
-    try:
-        cached = await r.get(key)
-        if cached is not None:
-            return int(cached)
-    except Exception:
-        cached = None
-
-    async with get_session() as session:
-        stmt = select(func.count()).where(
-            LLMUsage.user_google_sub == user_id,
-            LLMUsage.created_at >= week_start,
-        )
-        result = await session.exec(stmt)
-        count = result.scalar() or 0
-
-    # TTL 8일 (한 주 + 여유)
-    try:
-        await r.set(key, count, ex=60 * 60 * 24 * 8)
-    except Exception:
-        pass
-
-    return count
-
-
 async def _get_active_plan(user_id: str) -> PlanTier:
     """현재 활성화된 PlanTier 반환 (없으면 free)."""
     async with get_session() as session:
@@ -113,18 +81,12 @@ async def _get_active_plan(user_id: str) -> PlanTier:
 async def has_quota(user_id: str, _, model: str | None = None) -> bool:  # plan_tier param kept for compatibility
     plan = await _get_active_plan(user_id)
 
-    weekly = await weekly_usage_count(user_id)
     monthly = await monthly_usage_count(user_id)
 
     if model:
         category = MODEL_CATEGORY.get(model, "general")
     else:
         category = "general"
-
-    # weekly
-    weekly_limit = plan.weekly_request_limit if category == "general" else None
-    if weekly_limit and weekly >= weekly_limit:
-        return False
 
     # monthly
     monthly_limit = (
@@ -142,8 +104,10 @@ async def log_usage(user_id: str, model: str, prompt_tokens: int, completion_tok
     """LLM 호출 사용량 기록 및 비용 산출."""
 
     if cost_usd is None:
-        price_per_1k = MODEL_PRICING_PER_1K.get(model, 0)
-        cost_usd = ((prompt_tokens + completion_tokens) / 1000) * price_per_1k
+        pricing = MODEL_PRICING_PER_1K.get(model) or {"prompt": 0.0, "completion": 0.0}
+        cost_usd = (prompt_tokens / 1000) * pricing.get("prompt", 0) + (
+            completion_tokens / 1000
+        ) * pricing.get("completion", 0)
 
     usage = LLMUsage(
         user_google_sub=user_id,
