@@ -2,17 +2,20 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status, Request
 from pydantic import BaseModel
 import json
+from app.config import get_settings
 
 from app.services import portone as billing
 from app.tasks.payments import create_checkout_with_retry
 from app.models.plan_tier import PlanTier
 from app.models.user import User
 from app.deps import get_current_user
+from app.models.user_plan import UserPlan
 from app.models.payment import PaymentLog
 from app.models.db import get_session
 from sqlmodel import select
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+settings = get_settings()
 
 
 class PaymentRequest(BaseModel):
@@ -53,6 +56,73 @@ async def payment_webhook(request: Request, x_portone_signature: str = Header(""
 
     return {"status": "ok"}
 
+# === 구독 상태 조회 ===
+
+
+class ActiveSubResponse(BaseModel):
+    plan_tier: str | None = None  # 예: basic_monthly
+    payment_id: str | None = None
+    status: str | None = None  # latest event_type
+    amount_usd: float | None = None
+    currency: str | None = None
+    retry_attempts_left: int | None = None
+    next_payment_at: str | None = None  # ISO8601
+    expires_at: str | None = None
+
+
+@router.get("/active", response_model=ActiveSubResponse)
+async def get_active_subscription(user: User = Depends(get_current_user), session=Depends(get_session)):
+    """사용자의 최신 결제 로그를 조회하여 활성 구독 정보를 반환한다.
+
+    실제 PortOne 결제 모델이 복잡할 수 있으므로, 가장 최근 PaymentLog 레코드를
+    단순 조회해 payment_id 를 노출한다.
+    """
+    stmt = (
+        select(PaymentLog)
+        .where(
+            PaymentLog.user_google_sub == user.google_sub,
+            PaymentLog.event_type.in_(["payment_succeeded", "paid"]),
+        )
+        .order_by(PaymentLog.created_at.desc())
+        .limit(1)
+    )
+    row = (await session.exec(stmt)).one_or_none()  # type: ignore[attr-defined]
+
+    if row is None:
+        return ActiveSubResponse()
+
+    payment_id = None
+    currency = None
+    next_payment_at = None
+    retry_count = 0
+    if isinstance(row.raw_event, dict):
+        payment_id = row.raw_event.get("payment_id") or row.raw_event.get("id")
+        currency = row.raw_event.get("currency")
+        next_payment_at = row.raw_event.get("next_payment_at")
+        retry_count = row.raw_event.get("retry_count", 0)
+
+    # expires_at – 최신 UserPlan 레코드 참고
+    plan_stmt = (
+        select(UserPlan)
+        .where(UserPlan.user_google_sub == user.google_sub)
+        .order_by(UserPlan.expires_at.desc())
+        .limit(1)
+    )
+    plan_row = (await session.exec(plan_stmt)).one_or_none()  # type: ignore[attr-defined]
+    expires_at = plan_row.expires_at.isoformat() if plan_row and plan_row.expires_at else None
+
+    max_attempts = settings.RETRY_PAYMENT_MAX_ATTEMPTS
+    return ActiveSubResponse(
+        plan_tier=row.offering_id,
+        payment_id=payment_id,
+        status=row.event_type,
+        amount_usd=row.amount_usd,
+        currency=currency,
+        retry_attempts_left=max(0, max_attempts - retry_count),
+        next_payment_at=next_payment_at,
+        expires_at=expires_at,
+    )
+
 # === 구독 취소 ===
 
 
@@ -66,7 +136,16 @@ async def cancel_subscription(payload: CancelRequest, user: User = Depends(get_c
 
     result = await billing.cancel_subscription(user, payload.payment_id)
 
-    # PortOne 측 결제는 취소 요청되었으나, 만료 시점까지 plan 유지
-    # 별도 만료 webhook 처리에서 plan_tier 를 free 로 전환한다.
+    # 만료 시점 조회
+    async with get_session() as sess:
+        plan_row = (
+            await sess.exec(
+                select(UserPlan)
+                .where(UserPlan.user_google_sub == user.google_sub)
+                .order_by(UserPlan.expires_at.desc())
+                .limit(1)
+            )
+        ).one_or_none()
+        expires_at = plan_row.expires_at.isoformat() if plan_row and plan_row.expires_at else None
 
-    return {"status": "cancelled", "rc": result} 
+    return {"status": "cancelled", "expires_at": expires_at, "rc": result} 

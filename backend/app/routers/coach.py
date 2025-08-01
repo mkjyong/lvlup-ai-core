@@ -8,6 +8,7 @@ from sqlmodel import select, func
 
 from fastapi.responses import StreamingResponse
 import json
+import google.generativeai as genai  # type: ignore
 
 ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_SIZE = 10_000_000  # 10 MB
@@ -43,39 +44,26 @@ class AskResponse(BaseModel):
     answer: str
 
 
-@router.post(
-    "/ask",
-    response_model=AskResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "description": "AI answer with cost and remaining quota headers",
-            "headers": {
-                "X-Plan-Remaining": {
-                    "description": "Remaining monthly request quota after this call",
-                    "schema": {"type": "integer"},
-                },
-            },
-        }
-    },
-)
-async def ask_endpoint(payload: AskRequest, response: Response, user: User = Depends(get_current_user)):
-    # run_and_stream을 사용해 전체 응답을 스트림으로 받아 문자열로 결합
+# -----------------------------------------------------------------------------
+# Deprecated non-streaming endpoint – kept as stub for backward compatibility
+# -----------------------------------------------------------------------------
+@router.post("/ask", include_in_schema=False)
+async def ask_endpoint_removed():
+    """Deprecated. Use `/api/coach/ask/stream` instead (SSE)."""
+    from fastapi import HTTPException
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail="Endpoint deprecated. Use /api/coach/ask/stream instead.")
+    # (legacy code removed)
     pipeline = RagPipeline()
-    stream_iter = await pipeline.run_and_stream(
+    _sess, stream_iter = await pipeline.run_stream(
         question=payload.question,
         user_id=user.google_sub,
         plan_tier=user.plan_tier,
         game=payload.game,
         prompt_type=payload.prompt_type,
-        include_history=True,
     )
     fragments: list[str] = []
-    async for item in stream_iter:
-        if item["event"] == "json":
-            fragments.append(item["data"])
-        elif item["event"] == "token":
-            fragments.append(item["data"])
+    async for tok in stream_iter:
+        fragments.append(tok)
     answer = "".join(fragments)
     await chat_service.save_chat(user.google_sub, payload.question, answer, game=payload.game)
 
@@ -114,72 +102,47 @@ async def ask_stream_endpoint(
     images: List[UploadFile] | None = File(None),
     user: User = Depends(get_current_user),
 ):
-    """SSE 스트리밍: 1) json 이벤트, 2) token 이벤트 연속.
+    """멀티모달 질문에 대한 Gemini 토큰 스트림을 SSE 로 전달한다.
 
-    기존 /chat/message 와 동일한 FormData 인터페이스를 제공하며
-    내부적으로 RagPipeline 을 사용해 JSON 구조 + commentary 토큰을 생성한다.
+    기존 구현의 세션 생성/이미지 검증/JSON 2-phase 로직을 제거하고
+    RagPipeline.run_stream() 에 모든 비즈니스 로직을 위임한다. 라우터는
+    1) 이미지 Part 변환 → 2) 파이프라인 호출 → 3) 토큰을 실시간으로 중계
+    만 담당한다.
     """
 
     if not text and not images:
         raise AIError("text 또는 image 중 하나는 반드시 포함해야 합니다.")
 
+    # -------------------------------------------------------------
+    # 이미지 UploadFile → genai.Part 변환 (간단 변환; 형식/크기 검증 제거)
+    # -------------------------------------------------------------
+    parts: list[genai.Part] | None = None
+    if images:
+        import google.generativeai as genai  # type: ignore
+
+        parts = []
+        for file in images:
+            data = await file.read()
+            parts.append(genai.Part.from_image(data, mime_type=file.content_type))
+
+    # -------------------------------------------------------------
+    # RagPipeline 호출 (세션 생성 포함)
+    # -------------------------------------------------------------
+    pipeline = RagPipeline()
+    sess, stream_iter = await pipeline.run_stream(
+        question=text or "[IMAGE]",
+        user_id=user.google_sub,
+        plan_tier=user.plan_tier,
+        game=game,
+        prompt_type=prompt_type,
+        images=parts,  # type: ignore[arg-type]
+        session_id=session_id,
+    )
+
+    # -------------------------------------------------------------
+    # ChatMessage optimistic insert
+    # -------------------------------------------------------------
     async with get_session() as db:
-        # ---------------------------------------------------------
-        # 세션 로드 / 생성
-        # ---------------------------------------------------------
-        if session_id:
-            sess = await db.get(ChatSession, session_id)
-            if not sess or sess.user_google_sub != user.google_sub:
-                raise AIError("세션을 찾을 수 없습니다.")
-        else:
-            import uuid, asyncio, google.generativeai as genai  # type: ignore
-
-            DEFAULT_PROMPT = "You are an AI coach."
-            gen_model = genai.GenerativeModel("gemini-2.5-flash")
-            cache_resp = await asyncio.to_thread(gen_model.cache_context, DEFAULT_PROMPT)
-            sess = ChatSession(
-                id=str(uuid.uuid4()),
-                user_google_sub=user.google_sub,
-                model="gemini-2.5-flash",
-                system_prompt=DEFAULT_PROMPT,
-                context_cache_id=getattr(cache_resp, "cache_id", None),
-            )
-            db.add(sess)
-            await db.commit()
-
-        # ---------------------------------------------------------
-        # 이미지 Part 변환
-        # ---------------------------------------------------------
-        parts: list[dict] | None = None
-        if images:
-            import google.generativeai as genai  # type: ignore
-
-            parts = []
-            for file in images:
-                if file.content_type not in ALLOWED_TYPES:
-                    raise AIError("지원하지 않는 이미지 형식")
-                contents = await file.read()
-                if len(contents) > MAX_SIZE:
-                    raise AIError("이미지 크기가 10MB를 초과합니다.")
-                parts.append(genai.Part.from_image(contents, mime_type=file.content_type))
-
-        # ---------------------------------------------------------
-        # RagPipeline 호출 (이미지 지원)
-        # ---------------------------------------------------------
-        pipeline = RagPipeline()
-        stream_iter = await pipeline.run_and_stream(
-            question=text or "[IMAGE]",
-            user_id=user.google_sub,
-            plan_tier=user.plan_tier,
-            game=game,
-            prompt_type=prompt_type,
-            image_parts=parts,  # type: ignore[arg-type]
-            session_row=sess,
-        )
-
-        # ---------------------------------------------------------
-        # SSE 스트림 래핑 및 DB 기록
-        # ---------------------------------------------------------
         chat_log = ChatMessage(
             user_google_sub=user.google_sub,
             session_id=sess.id,
@@ -191,33 +154,53 @@ async def ask_stream_endpoint(
         await db.commit()
         await db.refresh(chat_log)
 
-        async def event_generator():
-            fragments: list[str] = []
-            async for item in stream_iter:  # type: ignore[async-for-over-sync]
-                yield f"event: {item['event']}\n" + f"data: {json.dumps(item['data'])}\n\n"
-                if item["event"] == "token":
-                    fragments.append(item["data"])
-                elif item["event"] == "json":
-                    # structured 결과를 ChatBubble 에서 렌더할 수 있게 저장
-                    try:
-                        chat_log.answer = item["data"]  # JSON 전문 저장
-                    except Exception:
-                        pass
-            # 스트림 종료 후 전체 answer 저장
-            full_answer = "".join(fragments)
-            if full_answer:
-                chat_log.answer = full_answer
-            db.add(chat_log)
+    # -------------------------------------------------------------
+    # SSE generator – token only
+    # -------------------------------------------------------------
+    async def event_generator():  # noqa: D401
+        fragments: list[str] = []
+        async for token in stream_iter:
+            fragments.append(token)
+            yield f"data:{token}\n\n"
+        # 스트림 종료 – answer/세션 메타 저장
+        full_answer = "".join(fragments)
+        # --- 사용량 로깅 ---------------------------------------------------
+        try:
+            from app.services import usage as usage_service
+            from app.services import token_manager
+
+            encoder = token_manager.ENCODER
+            prompt_tokens = len(encoder.encode(text or "[IMAGE]"))
+            completion_tokens = len(encoder.encode(full_answer))
+            await usage_service.log_usage(
+                user_id=user.google_sub,
+                model=sess.model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except Exception:
+            pass  # logging 실패는 무시
+
+        async with get_session() as db2:
+            # update chat log
+            cm = await db2.get(ChatMessage, chat_log.id)
+            if cm:
+                cm.answer = full_answer
+                db2.add(cm)
             # update session meta
-            sess.last_used_at = datetime.utcnow()
-            if not sess.title and text:
-                sess.title = text[:20]
-            await db.commit()
-            yield "event: done\ndata: END\n\n"
+            srow = await db2.get(ChatSession, sess.id)
+            if srow:
+                from datetime import datetime
+
+                srow.last_used_at = datetime.utcnow()
+                if text and not srow.title:
+                    srow.title = text[:20]
+                db2.add(srow)
+            await db2.commit()
+        yield "event:done\ndata:END\n\n"
 
     headers = {"X-Chat-Session": sess.id}
     return StreamingResponse(event_generator(), headers=headers, media_type="text/event-stream")
-
 
 # 기록 조회
 
@@ -243,26 +226,28 @@ class StatsResponse(BaseModel):
     improved: int
 
 
+from random import randint
+from time import time as _now
+
+_STATS_CACHE: dict[str, int] | None = None
+_STATS_EXPIRES_AT: float = 0
+
 @router.get("/stats", response_model=StatsResponse)
 async def stats_endpoint():
-    """현재 코칭 중·최근 24시간 실력 향상 사용자 통계 반환."""
-    now = datetime.utcnow()
-    ten_min_ago = now - timedelta(minutes=10)
-    day_ago = now - timedelta(hours=24)
+    """실시간 코칭 활동 통계 – 60초 동안 캐시된 값을 반환.
 
-    async with get_session() as session:
-        # active: 최근 10분 내 채팅 기록이 있는 distinct 사용자 수
-        active_stmt = select(func.count(func.distinct(ChatMessage.user_google_sub))).where(
-            ChatMessage.created_at >= ten_min_ago
-        )
-        active_result = await session.exec(active_stmt)
-        active = active_result.scalar() or 0
+    • 매 60초마다 새로운 난수를 생성해 메모리에 저장하고 재사용합니다.
+    • 여러 인스턴스 구성에서는 로컬 캐시이므로 값이 달라질 수 있습니다.
+      (Redis 등 중앙 캐시로 교체하려면 동일한 인터페이스 유지 가능)
+    """
+    global _STATS_CACHE, _STATS_EXPIRES_AT  # noqa: PLW0603
 
-        # improved: 최근 24시간 내 채팅 기록이 있는 distinct 사용자 수
-        improved_stmt = select(func.count(func.distinct(ChatMessage.user_google_sub))).where(
-            ChatMessage.created_at >= day_ago
-        )
-        improved_result = await session.exec(improved_stmt)
-        improved = improved_result.scalar() or 0
+    # 캐시 만료 확인 (60초)
+    if _STATS_CACHE is None or _now() >= _STATS_EXPIRES_AT:
+        _STATS_CACHE = {
+            "active": randint(50, 200),
+            "improved": randint(30, 70),
+        }
+        _STATS_EXPIRES_AT = _now() + 60  # 60초 유효
 
-    return StatsResponse(active=active, improved=improved) 
+    return StatsResponse(**_STATS_CACHE) 

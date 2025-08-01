@@ -12,7 +12,7 @@ from app.routers import billing as billing_router
 from app.routers import referral as referral_router
 from app.routers import user as user_router
 from app.routers import performance as performance_router
-from app.routers import assets as assets_router
+# from app.routers import assets as assets_router  # Temporarily disabled, not used currently
 from app.models.db import init_db
 from app.config import get_settings
 from app.middleware.quota import QuotaMiddleware
@@ -78,7 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(referral_router.router)
     app.include_router(user_router.router)
     app.include_router(performance_router.router)
-    app.include_router(assets_router.router)
+    # app.include_router(assets_router.router)  # Temporarily disabled
     from app.routers import chat as chat_router
     app.include_router(chat_router.router)
 

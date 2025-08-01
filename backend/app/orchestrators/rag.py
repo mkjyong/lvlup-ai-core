@@ -1,234 +1,151 @@
-"""Retrieval-Augmented Generation orchestration layer."""
-from dataclasses import dataclass
-from typing import List, Optional
+"""Retrieval-Augmented Generation (RAG) – minimal Gemini streaming orchestrator.
 
-from app.services import prompt as prompt_service
-from app.services import llm as llm_service
-from app.services import chat as chat_service
-from app.services import performance as perf_service
-from app.services.llm_session_pool import get_chat
-from app.models.chat_session import ChatSession
-# NEW: schema imports
-from app.schemas import coach as coach_schemas
-import json
+이 모듈은 Google Gemini ChatSession 기반으로 사용자의 질문을 스트리밍으로
+응답하기 위한 가장 작은 단위를 제공합니다. 복잡한 JSON 2-phase, 플레이어
+통계, 레거시 OpenAI 호환 로직을 모두 제거하고 다음 책임만 수행합니다.
+
+1. ChatSession 로드/생성   (select_model + system prompt 결정 포함)
+2. llm_session_pool.get_chat() 으로 Gemini Chat 객체 획득
+3. chat.send_message_stream(parts) 호출 후 (ChatSession, AsyncIterator[str]) 반환
+
+이렇게 단순화함으로써 비즈니스 로직을 RagPipeline.run_stream() 하나로
+집약하고, 라우터/서비스 계층은 토큰 스트림을 전달/저장하는 일에만 집중할
+수 있습니다.
+"""
+from __future__ import annotations
+
+import asyncio
+import uuid
+from dataclasses import dataclass
+from typing import AsyncIterator, List, Optional, Tuple
+
 import google.generativeai as genai  # type: ignore
 
+from app.models.chat_session import ChatSession
+from app.models.db import get_session
+from app.services import prompt as prompt_service
+from app.services.llm_session_pool import get_chat
 
-def select_model(game: Optional[str]) -> str:
-    """게임 타입에 따라 사용할 LLM 모델 결정."""
+# ---------------------------------------------------------------------------
+# Helper – 모델 선택
+# ---------------------------------------------------------------------------
+
+def select_model(game: Optional[str]) -> str:  # noqa: D401
+    """게임 종류에 따라 LLM 모델명을 선택한다."""
+
     if game and game.lower() in {"lol", "pubg"}:
         return "gemini-2.5-flash"
     return "gemini-2.5-flash-lite"
 
 
+# ---------------------------------------------------------------------------
+# Main Pipeline – minimal streaming
+# ---------------------------------------------------------------------------
+
 @dataclass
-class RagPipeline:
-    """Main RAG orchestration pipeline."""
-
-    # async def run(
-    #     self,
-    #     *,
-    #     question: str,
-    #     user_id: str,
-    #     plan_tier: str = "free",
-    #     game: Optional[str] = None,
-    #     prompt_type: Optional[str] = None,
-    #     include_history: bool = True,
-    #     history_limit: int = 10,
-    # ) -> str:
-    #     """Execute full RAG flow and return answer string."""
-
-    #     # --- 요금제별 히스토리 제한 --------------------------------
-    #     if plan_tier == "free":
-    #         history_limit = min(history_limit, 5)  # 최신 2쌍만 유지
-
-    #     # 2) 게임별 Player Stats 확보 --------------------------------
-    #     player_stats_block: str | None = None
-    #     if game and user_id:
-    #         try:
-    #             from app.models.db import get_session  # local import to avoid circular
-
-    #             async with get_session() as session:
-    #                 stats = await perf_service.ensure_stats_cached(session, user_id, game)
-    #             # 간단한 Key:Value 나열로 문자열 변환
-    #             stats_str = "\n".join(f"- {k}: {v}" for k, v in stats.items())
-    #             player_stats_block = f"[PlayerStats]\n{stats_str}"
-    #         except Exception:
-    #             # 캐시에 실패해도 계속 진행 (게임 계정 미등록 등)
-    #             player_stats_block = None
-
-    #     # 3) Render system prompt (게임별 템플릿)
-    #     ptype = prompt_type or prompt_service.PromptType.generic.name
-    #     try:
-    #         prompt_enum = prompt_service.PromptType[ptype]
-    #     except KeyError:
-    #         prompt_enum = prompt_service.PromptType.generic
-
-    #     # 3) Determine reusable prompt ID (Responses API) -------------------
-    #     system_prompt = prompt_service.get_system_prompt(prompt_enum)
-
-    #     # 4) Build prompt variables & message -------------------------
-    #     prompt_vars: dict[str, str] = {}
-
-    #     if player_stats_block:
-    #         prompt_vars["player_stats"] = player_stats_block
-
-    #     if include_history and user_id:
-    #         history = await chat_service.list_chat_history(user_id, history_limit, game)
-    #         # oldest → newest 로 정렬, 간단히 assistant answer만 이어붙임
-    #         conv_snippets = "\n\n".join(h.answer for h in reversed(history))
-    #         if conv_snippets:
-    #             prompt_vars["conversation_snippets"] = conv_snippets
-
-    #     # 메시지는 현재 질문만 포함
-    #     messages: List[dict[str, str]] = []
-    #     if system_prompt:
-    #         messages.append({"role": "system", "content": system_prompt})
-    #     messages.append({"role": "user", "content": question})
-
-
-    #     # 6) Determine model
-    #     model = select_model(game)
-
-    #     # 7) Call Responses API 래퍼 -----------------------------------
-    #     answer = await llm_service.response_completion(
-    #         messages,
-    #         model=model,
-            
-    #         user_id=user_id,
-    #         plan_tier=plan_tier,
-    #         prompt_vars=prompt_vars or None,
-    #     )
-
-    #     return answer 
-
-# -------------------------------------------------------------------
-# NEW helper and stream method
-# -------------------------------------------------------------------
+class RagPipeline:  # noqa: D101 – simple wrapper
+    """Gemini 기반 RAG 파이프라인 (스트리밍 전용)."""
 
     async def run_stream(
         self,
         *,
         question: str,
         user_id: str,
-        plan_tier: str = "free",
-        game: Optional[str] = None,
-        prompt_type: Optional[str] = None,
-        image_parts: list | None = None,
-        session_row: "ChatSession" | None = None,
-    ):
-        """1) JSON 구조 응답 → 2) 스트리밍 commentary 토큰 순으로 async generator 리턴."""
+        plan_tier: str = "free",  # plan_tier 는 quota 체크용 – 현재 로직에선 미사용
+        game: str | None = None,
+        prompt_type: str | None = None,
+        images: List[genai.Part] | None = None,
+        session_id: str | None = None,
+    ) -> Tuple[ChatSession, AsyncIterator[str]]:
+        """스트리밍 응답을 위한 단일 엔트리 포인트.
 
-        player_stats_block: str | None = None
-        if game and user_id:
-            try:
-                from app.models.db import get_session
+        Parameters
+        ----------
+        question : str
+            사용자의 현재 질문 문자열.
+        user_id : str
+            Google sub (unique user id).
+        plan_tier : str, optional
+            요금제 정보(사용량 체크 용도) – 현재 함수 내부에서는 사용하지 않음.
+        game : str | None, optional
+            게임 타입(lol | pubg 등). 모델 선택에 활용.
+        prompt_type : str | None, optional
+            시스템 프롬프트 종류(generic | lol | pubg …).
+        images : list[genai.Part] | None, optional
+            이미지 Part 리스트 (multimodal 입력). None 이면 텍스트 전용.
+        session_id : str | None, optional
+            기존 세션 ID. 없으면 새로 생성.
 
-                async with get_session() as session:
-                    stats = await perf_service.ensure_stats_cached(session, user_id, game)
-                stats_str = "\n".join(f"- {k}: {v}" for k, v in stats.items())
-                player_stats_block = f"[PlayerStats]\n{stats_str}"
-            except Exception:  # pragma: no cover
-                player_stats_block = None
-
-        ptype = prompt_type or prompt_service.PromptType.generic.name
-        try:
-            prompt_enum = prompt_service.PromptType[ptype]
-        except KeyError:
-            prompt_enum = prompt_service.PromptType.generic
-
-        system_prompt = prompt_service.get_system_prompt(prompt_enum)
-
-
-
-        prompt_vars: dict[str, str] = {}
-        if player_stats_block:
-            prompt_vars["player_stats"] = player_stats_block
-
-
-        messages: List[dict[str, str]] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": question})
-
-        model = select_model(game)
+        Returns
+        -------
+        tuple(ChatSession, AsyncIterator[str])
+            DB 세션 행과 Gemini token 스트림.
+        """
 
         # -------------------------------------------------------------------
-        # ChatSession 로드/생성 ------------------------------------------------
+        # 1) ChatSession 로드/생성
         # -------------------------------------------------------------------
-        if session_row is None:
-            from app.models.db import get_session  # local import
-            import asyncio, uuid
-            async with get_session() as db:
-                if session_row is None:
-                    # 새 세션 생성
-                    ptype = prompt_type or prompt_service.PromptType.generic.name
-                    try:
-                        prompt_enum = prompt_service.PromptType[ptype]
-                    except KeyError:
-                        prompt_enum = prompt_service.PromptType.generic
-                    system_prompt = prompt_service.get_system_prompt(prompt_enum)
-                    gen_model = genai.GenerativeModel(model)
-                    cache_resp = await asyncio.to_thread(gen_model.cache_context, system_prompt)
-                    session_row = ChatSession(
-                        id=str(uuid.uuid4()),
-                        user_google_sub=user_id,
-                        model=model,
-                        system_prompt=system_prompt,
-                        context_cache_id=getattr(cache_resp, "cache_id", None),
+        async with get_session() as db:
+            sess: ChatSession | None = None
+            if session_id:
+                sess = await db.get(ChatSession, session_id)
+            if not sess:
+                # 모델 & 시스템 프롬프트 결정
+                model = select_model(game)
+                try:
+                    p_enum = (
+                        prompt_service.PromptType(prompt_type)  # type: ignore[arg-type]
+                        if prompt_type
+                        else prompt_service.PromptType.generic
                     )
-                    db.add(session_row)
-                    await db.commit()
+                except ValueError:
+                    p_enum = prompt_service.PromptType.generic
+
+                sys_prompt = prompt_service.get_system_prompt(p_enum)
+
+                gen_model = genai.GenerativeModel(model)
+                cache_resp = await asyncio.to_thread(gen_model.cache_context, sys_prompt)
+                cache_id = getattr(cache_resp, "cache_id", None)
+
+                sess = ChatSession(
+                    id=str(uuid.uuid4()),
+                    user_google_sub=user_id,
+                    model=model,
+                    system_prompt=sys_prompt,
+                    context_cache_id=cache_id,
+                )
+                db.add(sess)
+                await db.commit()
 
         # -------------------------------------------------------------------
-        # ChatSession 기반 호출 (토큰 스트리밍 only)
+        # 2) Gemini Chat 객체 준비
         # -------------------------------------------------------------------
-        if session_row is not None:
-            # ChatSession 기반 (이미지 포함 가능)
-            chat_obj = get_chat(session_row)
+        from app.services.llm_session_pool import get_chat_with_history
+        chat = await get_chat_with_history(sess)  # LRU cache + DB history
 
-            # 사용자 파트 구성
-            parts: list[genai.Part] = []
-            if image_parts:
-                parts.extend(image_parts)  # type: ignore[arg-type]
-            parts.append(genai.Part(text=question))
+        # 사용자 입력 파트 구성 (multimodal)
+        parts: List[genai.Part] = list(images) if images else []
+        parts.append(genai.Part(text=question))
 
-            commentary_iter = chat_obj.send_message_stream(parts)
-        else:
-            # 레거시 텍스트 파이프라인 (이미지 미지원)
-            # 1차 호출: JSON 구조 ------------------------------------
-            json_text = await llm_service.response_completion(
-                messages,
-                model=model,
-                
-                user_id=user_id,
-                plan_tier=plan_tier,
-                stream=False,
-                prompt_vars=prompt_vars or None,
-            )
+        # -------------------------------------------------------------------
+        # 3) Streaming 호출 및 반환
+        # -------------------------------------------------------------------
+        stream_iter = chat.send_message_stream(parts)
 
-            # ------------------ JSON 검증 ---------------------------
-            try:
-                structured_obj = json.loads(json_text)
-                # jsonschema.validate(instance=structured_obj, schema=schema)  # TODO: validate schema properly
-            except Exception as e:
-                # Validation 실패 시 사용자에게 에러 전달
-                raise ValueError("LLM returned invalid JSON structure") from e
+        return sess, stream_iter
 
-            # 2차 호출: commentary 스트리밍 ------------------------------
-            commentary_iter = llm_service.response_completion(
-                messages,
-                model=model,
-                
-                user_id=user_id,
-                plan_tier=plan_tier,
-                stream=True,
-                prompt_vars=prompt_vars or None,
-            )
+    # -----------------------------------------------------------------------
+    # Back-compat helper – 기존 run_and_stream 를 최소 구현으로 유지 (옵션)
+    # -----------------------------------------------------------------------
 
-        return session_row, commentary_iter  # returning tuple
-            yield {"event": "json", "data": json_text}
-            async for token in commentary_iter:  # type: ignore[async-for-over-sync]
-                yield {"event": "token", "data": token}
+    async def run_and_stream(self, **kwargs):  # type: ignore[override]
+        """[Deprecated] run_stream 호환 래퍼 – 추후 제거 예정."""
+        # 호환성: 과거 인자 제거 (include_history 등)
+        _ = kwargs.pop("include_history", None)
+        sess, iterator = await self.run_stream(**kwargs)
 
-        return _combined_iter() 
+        async def _iter():
+            async for tok in iterator:
+                yield {"event": "token", "data": tok}
+
+        return _iter()  # type: ignore[return-value]
