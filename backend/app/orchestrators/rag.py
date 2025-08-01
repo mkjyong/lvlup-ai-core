@@ -124,8 +124,8 @@ class RagPipeline:  # noqa: D101 – simple wrapper
         chat = await get_chat_with_history(sess)  # LRU cache + DB history
 
         # 사용자 입력 파트 구성 (multimodal)
-        parts: List[genai.Part] = list(images) if images else []
-        parts.append(genai.Part(text=question))
+        parts: list = list(images) if images else []
+        parts.append(question)
 
         # -------------------------------------------------------------------
         # 3) Streaming 호출 및 반환

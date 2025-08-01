@@ -87,9 +87,9 @@ async def get_chat_with_history(row: ChatSessionRow, *, history_limit: int = DEF
             )
             rows = (await session.exec(stmt)).all()
         for msg in reversed(rows):  # oldest → newest
-            history.append({"role": "user", "parts": [genai.Part(text=msg.question)]})
+            history.append({"role": "user", "parts": [msg.question]})
             if msg.answer:
-                history.append({"role": "model", "parts": [genai.Part(text=msg.answer)]})
+                history.append({"role": "model", "parts": [msg.answer]})
     except Exception:
         history = []  # fallback silently
 
