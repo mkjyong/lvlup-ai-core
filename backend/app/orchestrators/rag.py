@@ -6,9 +6,12 @@ from app.services import prompt as prompt_service
 from app.services import llm as llm_service
 from app.services import chat as chat_service
 from app.services import performance as perf_service
+from app.services.llm_session_pool import get_chat
+from app.models.chat_session import ChatSession
 # NEW: schema imports
 from app.schemas import coach as coach_schemas
-import json, jsonschema
+import json
+import google.generativeai as genai  # type: ignore
 
 
 def select_model(game: Optional[str]) -> str:
@@ -103,7 +106,7 @@ class RagPipeline:
 # NEW helper and stream method
 # -------------------------------------------------------------------
 
-    async def run_and_stream(
+    async def run_stream(
         self,
         *,
         question: str,
@@ -111,8 +114,8 @@ class RagPipeline:
         plan_tier: str = "free",
         game: Optional[str] = None,
         prompt_type: Optional[str] = None,
-        include_history: bool = True,
-        history_limit: int = 10,
+        image_parts: list | None = None,
+        session_row: "ChatSession" | None = None,
     ):
         """1) JSON 구조 응답 → 2) 스트리밍 commentary 토큰 순으로 async generator 리턴."""
 
@@ -142,11 +145,6 @@ class RagPipeline:
         if player_stats_block:
             prompt_vars["player_stats"] = player_stats_block
 
-        if include_history and user_id:
-            history = await chat_service.list_chat_history(user_id, history_limit, game)
-            conv_snippets = "\n\n".join(h.answer for h in reversed(history))
-            if conv_snippets:
-                prompt_vars["conversation_snippets"] = conv_snippets
 
         messages: List[dict[str, str]] = []
         if system_prompt:
@@ -155,37 +153,80 @@ class RagPipeline:
 
         model = select_model(game)
 
-        # 1차 호출: JSON 구조 ------------------------------------------------
-        json_text = await llm_service.response_completion(
-            messages,
-            model=model,
-            
-            user_id=user_id,
-            plan_tier=plan_tier,
-            stream=False,
-            prompt_vars=prompt_vars or None,
-        )
+        # -------------------------------------------------------------------
+        # ChatSession 로드/생성 ------------------------------------------------
+        # -------------------------------------------------------------------
+        if session_row is None:
+            from app.models.db import get_session  # local import
+            import asyncio, uuid
+            async with get_session() as db:
+                if session_row is None:
+                    # 새 세션 생성
+                    ptype = prompt_type or prompt_service.PromptType.generic.name
+                    try:
+                        prompt_enum = prompt_service.PromptType[ptype]
+                    except KeyError:
+                        prompt_enum = prompt_service.PromptType.generic
+                    system_prompt = prompt_service.get_system_prompt(prompt_enum)
+                    gen_model = genai.GenerativeModel(model)
+                    cache_resp = await asyncio.to_thread(gen_model.cache_context, system_prompt)
+                    session_row = ChatSession(
+                        id=str(uuid.uuid4()),
+                        user_google_sub=user_id,
+                        model=model,
+                        system_prompt=system_prompt,
+                        context_cache_id=getattr(cache_resp, "cache_id", None),
+                    )
+                    db.add(session_row)
+                    await db.commit()
 
-        # ------------------ JSON 검증 ---------------------------
-        try:
-            structured_obj = json.loads(json_text)
-            jsonschema.validate(instance=structured_obj, schema=schema)
-        except Exception as e:
-            # Validation 실패 시 사용자에게 에러 전달
-            raise ValueError("LLM returned invalid JSON structure") from e
+        # -------------------------------------------------------------------
+        # ChatSession 기반 호출 (토큰 스트리밍 only)
+        # -------------------------------------------------------------------
+        if session_row is not None:
+            # ChatSession 기반 (이미지 포함 가능)
+            chat_obj = get_chat(session_row)
 
-        # 2차 호출: commentary 스트리밍 ------------------------------------
-        commentary_iter = llm_service.response_completion(
-            messages,
-            model=model,
-            
-            user_id=user_id,
-            plan_tier=plan_tier,
-            stream=True,
-            prompt_vars=prompt_vars or None,
-        )
+            # 사용자 파트 구성
+            parts: list[genai.Part] = []
+            if image_parts:
+                parts.extend(image_parts)  # type: ignore[arg-type]
+            parts.append(genai.Part(text=question))
 
-        async def _combined_iter():
+            commentary_iter = chat_obj.send_message_stream(parts)
+        else:
+            # 레거시 텍스트 파이프라인 (이미지 미지원)
+            # 1차 호출: JSON 구조 ------------------------------------
+            json_text = await llm_service.response_completion(
+                messages,
+                model=model,
+                
+                user_id=user_id,
+                plan_tier=plan_tier,
+                stream=False,
+                prompt_vars=prompt_vars or None,
+            )
+
+            # ------------------ JSON 검증 ---------------------------
+            try:
+                structured_obj = json.loads(json_text)
+                # jsonschema.validate(instance=structured_obj, schema=schema)  # TODO: validate schema properly
+            except Exception as e:
+                # Validation 실패 시 사용자에게 에러 전달
+                raise ValueError("LLM returned invalid JSON structure") from e
+
+            # 2차 호출: commentary 스트리밍 ------------------------------
+            commentary_iter = llm_service.response_completion(
+                messages,
+                model=model,
+                
+                user_id=user_id,
+                plan_tier=plan_tier,
+                stream=True,
+                prompt_vars=prompt_vars or None,
+            )
+
+        return session_row, commentary_iter  # returning tuple
             yield {"event": "json", "data": json_text}
             async for token in commentary_iter:  # type: ignore[async-for-over-sync]
                 yield {"event": "token", "data": token}

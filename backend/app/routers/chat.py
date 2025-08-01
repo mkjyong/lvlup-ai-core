@@ -72,7 +72,8 @@ async def list_messages(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/message", status_code=status.HTTP_200_OK)
+# @router.post("/message", status_code=status.HTTP_200_OK)
+# Legacy endpoint disabled. Calls should use /api/coach/ask/stream
 async def post_message(
     session_id: str | None = Form(None),
     text: str | None = Form(None),

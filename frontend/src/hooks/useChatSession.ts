@@ -4,6 +4,8 @@ import { useChatStore } from "../stores/chat";
 interface SendPayload {
   text?: string;
   files?: File[];
+  game?: string;
+  sessionId?: string;
 }
 
 export function useChatSession() {
@@ -13,11 +15,17 @@ export function useChatSession() {
 
   const start = useCallback(async (payload: SendPayload) => {
     const form = new FormData();
-    if (current?.id) form.append("session_id", current.id);
+    // 세션 ID
+    if (payload.sessionId) {
+      form.append("session_id", payload.sessionId);
+    } else if (current?.id) {
+      form.append("session_id", current.id);
+    }
     if (payload.text) form.append("text", payload.text);
+    if (payload.game) form.append("game", payload.game);
     payload.files?.forEach((f) => form.append("image", f, f.name));
 
-    const res = await fetch("/chat/message", {
+    const res = await fetch("/api/coach/ask/stream", {
       method: "POST",
       body: form,
       credentials: "include",

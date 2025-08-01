@@ -99,6 +99,7 @@ const ChatPage: React.FC = () => {
       await startStream({
         text: userMsg.text ?? '',
         files: imageFiles,
+        game,
       });
     } catch (error) {
       // eslint-disable-next-line no-console
