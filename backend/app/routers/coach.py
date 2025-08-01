@@ -170,7 +170,18 @@ async def ask_stream_endpoint(
             from app.services import token_manager
 
             encoder = token_manager.ENCODER
-            prompt_tokens = len(encoder.encode(text or "[IMAGE]"))
+            # Gemini 공식 토큰 카운터 사용(가능 시) – 이미지 토큰 포함 x ⇒ 이미지 1장당 512 보수적 가산
+            try:
+                import google.generativeai as genai  # type: ignore
+
+                gen_model = genai.GenerativeModel(sess.model)
+                prompt_tokens = gen_model.count_tokens(text or "[IMAGE]").total_tokens  # type: ignore[attr-defined]
+            except Exception:
+                prompt_tokens = len(encoder.encode(text or "[IMAGE]"))
+
+            if parts:  # 이미지 입력이 있는 경우 보정값 가산
+                prompt_tokens += 512 * len(parts)  # conservative
+
             completion_tokens = len(encoder.encode(full_answer))
             await usage_service.log_usage(
                 user_id=user.google_sub,

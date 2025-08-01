@@ -46,7 +46,15 @@ const currency = isKorean ? 'KRW' : 'USD';
     }
   };
 
-  const [subInfo, setSubInfo] = useState<{ payment_id?: string } | null>(null);
+  interface SubscriptionInfo {
+  payment_id?: string;
+  expires_at?: string;
+  status?: string;
+  amount_usd?: number;
+  currency?: string;
+}
+
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
 
   const loadSubscription = async () => {
     try {

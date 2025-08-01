@@ -133,19 +133,3 @@ class RagPipeline:  # noqa: D101 – simple wrapper
         stream_iter = chat.send_message_stream(parts)
 
         return sess, stream_iter
-
-    # -----------------------------------------------------------------------
-    # Back-compat helper – 기존 run_and_stream 를 최소 구현으로 유지 (옵션)
-    # -----------------------------------------------------------------------
-
-    async def run_and_stream(self, **kwargs):  # type: ignore[override]
-        """[Deprecated] run_stream 호환 래퍼 – 추후 제거 예정."""
-        # 호환성: 과거 인자 제거 (include_history 등)
-        _ = kwargs.pop("include_history", None)
-        sess, iterator = await self.run_stream(**kwargs)
-
-        async def _iter():
-            async for tok in iterator:
-                yield {"event": "token", "data": tok}
-
-        return _iter()  # type: ignore[return-value]

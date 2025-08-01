@@ -15,7 +15,7 @@ def message_tokens(msg: Dict[str, Any]) -> int:
     tokens = len(ENCODER.encode(msg["content"])) + 4
 
     # 이미지 토큰 가산: `image_count` 키 또는 `images` 리스트 존재 시 반영
-    # 규칙: 이미지 1장당 150 tokens
+    # Gemini 과금 기준이 아직 공식화되지 않았으므로 보수적으로 1장당 512 tokens 가정
     image_cnt = 0
     if "image_count" in msg and isinstance(msg["image_count"], int):
         image_cnt = msg["image_count"]

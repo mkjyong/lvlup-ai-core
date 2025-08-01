@@ -78,25 +78,43 @@ async def _generate_content_with_usage(model: str, prompt: str, *, enable_search
 # Streaming helper
 # ---------------------------------------------------------------------------
 
+from concurrent.futures import ThreadPoolExecutor
+
+# 전역 한정 ThreadPool – 무제한 스레드 스폰 방지
+_STREAM_EXECUTOR = ThreadPoolExecutor(
+    max_workers=int(os.getenv("STREAM_WORKERS", "64"))
+)
+
 def _stream_content(model: str, prompt: str, *, enable_search: bool = True):
-    """Google Gemini SDK 스트리밍 결과를 AsyncIterator 로 래핑."""
+    """Google Gemini SDK 스트리밍 결과를 AsyncIterator 로 래핑.
+
+    ThreadPoolExecutor 에 작업을 제출해 동시에 실행되는 blocking worker
+    수를 제어한다. 풀 초과 시 RuntimeError 를 발생시켜 상위 레이어에서
+    429/503 등을 반환하도록 유도할 수 있다.
+    """
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[str | None] = asyncio.Queue()
 
     def _worker() -> None:
-        gen_model = genai.GenerativeModel(model)
-        kw: dict = {}
-        if enable_search:
-            kw["tools"] = [GROUNDING_TOOL]
-        for chunk in gen_model.generate_content(prompt, stream=True, **kw):
-            text = getattr(chunk, "text", None)
-            if text:
-                asyncio.run_coroutine_threadsafe(queue.put(text), loop)
-        # 스트림 종료 시 sentinel None
-        asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+        try:
+            gen_model = genai.GenerativeModel(model)
+            kw: dict = {}
+            if enable_search:
+                kw["tools"] = [GROUNDING_TOOL]
+            for chunk in gen_model.generate_content(prompt, stream=True, **kw):
+                text = getattr(chunk, "text", None)
+                if text:
+                    loop.call_soon_threadsafe(queue.put_nowait, text)
+        finally:
+            # sentinel to close iterator
+            loop.call_soon_threadsafe(queue.put_nowait, None)
 
-    threading.Thread(target=_worker, daemon=True).start()
+    # 풀에 작업 제출 (풀 초과 시 RuntimeError)
+    try:
+        _STREAM_EXECUTOR.submit(_worker)
+    except RuntimeError:
+        raise AIError("Server busy, please retry later")
 
     async def _iterator() -> AsyncIterator[str]:  # noqa: D401
         while True:

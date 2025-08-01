@@ -33,13 +33,22 @@ def get_chat(row: ChatSessionRow):  # kept for backward compatibility
         return _sessions[sid]
 
     model = genai.GenerativeModel(row.model)
-    gen_conf = {"max_thought_tokens": 512}
+    # Generation parameters (하드코딩 요구 사항)
+    gen_conf = {
+        "candidate_count": 1,
+        "max_output_tokens": 5000,
+    }
+    # cache_id 는 Gemini context caching 용도로 그대로 유지
     if row.context_cache_id:
         gen_conf["cache_id"] = row.context_cache_id
+
+    # Google Search 툴 활성화 (기본 설정)
+    search_tool = genai.tools.GoogleSearch()
 
     chat = model.start_chat(
         system_instruction=row.system_prompt,
         generation_config=gen_conf,
+        tools=[search_tool],
         history=[],
     )
     _sessions[sid] = chat
@@ -47,8 +56,17 @@ def get_chat(row: ChatSessionRow):  # kept for backward compatibility
     return chat
 
 
-async def get_chat_with_history(row: ChatSessionRow, *, history_limit: int = 20):  # noqa: D401
-    """비동기 버전: 캐시 미스 시 DB 히스토리를 초기 history 로 주입."""
+# 최대 유지할 최근 대화 '턴'(user+model)의 수
+DEFAULT_HISTORY_TURNS = 4
+
+async def get_chat_with_history(row: ChatSessionRow, *, history_limit: int = DEFAULT_HISTORY_TURNS * 2):  # noqa: D401
+    """비동기 버전: 캐시 미스 시 DB 히스토리를 초기 history 로 주입.
+
+    Parameters
+    ----------
+    history_limit : int, optional
+        가져올 메시지 수. 기본값은 최근 4턴(user+model 8개 메시지) 입니다.
+    """
 
     sid = row.id
     if sid in _sessions:
@@ -76,13 +94,19 @@ async def get_chat_with_history(row: ChatSessionRow, *, history_limit: int = 20)
         history = []  # fallback silently
 
     model = genai.GenerativeModel(row.model)
-    gen_conf = {"max_thought_tokens": 512}
+    gen_conf = {
+        "candidate_count": 1,
+        "max_output_tokens": 5000,
+    }
     if row.context_cache_id:
         gen_conf["cache_id"] = row.context_cache_id
+
+    search_tool = genai.tools.GoogleSearch()
 
     chat = model.start_chat(
         system_instruction=row.system_prompt,
         generation_config=gen_conf,
+        tools=[search_tool],
         history=history,
     )
     _sessions[sid] = chat
