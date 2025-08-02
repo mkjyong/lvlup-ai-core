@@ -11,7 +11,8 @@ from app.models.user import User
 from app.deps import get_current_user
 from app.models.user_plan import UserPlan
 from app.models.payment import PaymentLog
-from app.models.db import get_session
+from app.deps import get_session as get_session_dep
+from app.models.db import get_session as get_session_cm
 from sqlmodel import select
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -71,7 +72,7 @@ class ActiveSubResponse(BaseModel):
 
 
 @router.get("/active", response_model=ActiveSubResponse)
-async def get_active_subscription(user: User = Depends(get_current_user), session=Depends(get_session)):
+async def get_active_subscription(user: User = Depends(get_current_user), session=Depends(get_session_dep)):
     """사용자의 최신 결제 로그를 조회하여 활성 구독 정보를 반환한다.
 
     실제 PortOne 결제 모델이 복잡할 수 있으므로, 가장 최근 PaymentLog 레코드를
@@ -137,7 +138,7 @@ async def cancel_subscription(payload: CancelRequest, user: User = Depends(get_c
     result = await billing.cancel_subscription(user, payload.payment_id)
 
     # 만료 시점 조회
-    async with get_session() as sess:
+    async with get_session_cm() as sess:
         plan_row = (
             await sess.exec(
                 select(UserPlan)

@@ -8,7 +8,7 @@ from sqlmodel import select, func
 
 from fastapi.responses import StreamingResponse
 import json
-import google.generativeai as genai  # type: ignore
+from app.services.genai_client import types
 
 ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_SIZE = 10_000_000  # 10 MB
@@ -116,14 +116,14 @@ async def ask_stream_endpoint(
     # -------------------------------------------------------------
     # 이미지 UploadFile → genai.Part 변환 (간단 변환; 형식/크기 검증 제거)
     # -------------------------------------------------------------
-    parts: list[genai.Part] | None = None
+    parts: list[types.Part] | None = None
     if images:
-        import google.generativeai as genai  # type: ignore
+        from app.services.genai_client import types
 
         parts = []
         for file in images:
             data = await file.read()
-            parts.append(genai.Part.from_image(data, mime_type=file.content_type))
+            parts.append(types.Part.from_bytes(data=data, mime_type=file.content_type))
 
     # -------------------------------------------------------------
     # RagPipeline 호출 (세션 생성 포함)
@@ -172,10 +172,9 @@ async def ask_stream_endpoint(
             encoder = token_manager.ENCODER
             # Gemini 공식 토큰 카운터 사용(가능 시) – 이미지 토큰 포함 x ⇒ 이미지 1장당 512 보수적 가산
             try:
-                import google.generativeai as genai  # type: ignore
+                from app.services.genai_client import count_tokens
 
-                gen_model = genai.GenerativeModel(sess.model)
-                prompt_tokens = gen_model.count_tokens(text or "[IMAGE]").total_tokens  # type: ignore[attr-defined]
+                prompt_tokens = count_tokens(sess.model, text or "[IMAGE]")
             except Exception:
                 prompt_tokens = len(encoder.encode(text or "[IMAGE]"))
 

@@ -37,7 +37,7 @@ async def monthly_usage_count(user_id: str) -> int:
             LLMUsage.user_google_sub == user_id, LLMUsage.created_at >= month_start
         )
         result = await session.exec(stmt)
-        count = result.scalar() or 0
+        count = result.one_or_none() or 0
 
     # Populate cache (TTL 32일)
     try:
@@ -66,7 +66,7 @@ async def _get_active_plan(user_id: str) -> PlanTier:
         # Fallback: User.plan_tier string
         user_stmt = select(User.plan_tier).where(User.google_sub == user_id)
         r = await session.exec(user_stmt)
-        tier_name = r.scalar_one_or_none() or "free"
+        tier_name = r.one_or_none() or "free"
         plan_stmt = select(PlanTier).where(PlanTier.name == tier_name)
         rp = await session.exec(plan_stmt)
         plan = rp.one_or_none()
@@ -77,6 +77,10 @@ async def _get_active_plan(user_id: str) -> PlanTier:
         pf = await session.exec(select(PlanTier).where(PlanTier.name == "free"))
         return pf.one()
 
+
+async def get_active_plan(user_id: str) -> PlanTier:
+    """Public wrapper to fetch active PlanTier."""
+    return await _get_active_plan(user_id)
 
 async def has_quota(user_id: str, _, model: str | None = None) -> bool:  # plan_tier param kept for compatibility
     plan = await _get_active_plan(user_id)

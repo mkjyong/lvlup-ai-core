@@ -17,7 +17,7 @@ async def _seed() -> None:
             price_usd=0.0,
             prompt_limit=500,
             completion_limit=1000,
-            weekly_request_limit=30,
+            
             monthly_request_limit=200,
         )
         basic = PlanTier(
@@ -25,7 +25,7 @@ async def _seed() -> None:
             price_usd=10.0,
             prompt_limit=1000,
             completion_limit=2000,
-            weekly_request_limit=200,
+            
             monthly_request_limit=800,
             special_monthly_request_limit=100,
         )
@@ -34,7 +34,7 @@ async def _seed() -> None:
             price_usd=100.0,
             prompt_limit=1000,
             completion_limit=2000,
-            weekly_request_limit=200,
+            
             monthly_request_limit=800,
             special_monthly_request_limit=100,
         )

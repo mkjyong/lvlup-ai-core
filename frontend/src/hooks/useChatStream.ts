@@ -8,12 +8,42 @@ export function useChatStream() {
     setJsonData(null);
     setText("");
 
-    const response = await fetch("/api/coach/ask/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-      credentials: "include",
-    });
+    const token = localStorage.getItem("token");
+
+    // --- FormData 구성 ---
+    const form = new FormData();
+    form.append("text", params.question);
+    if (params.game && (params.game === "lol" || params.game === "pubg")) {
+      form.append("game", params.game);
+    }
+
+    async function doRequest(accessToken?: string): Promise<Response> {
+      return fetch(`${import.meta.env.VITE_API_BASE_URL}/api/coach/ask/stream`, {
+        method: "POST",
+        body: form,
+        credentials: "include",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+    }
+
+    let response = await doRequest(token || undefined);
+
+    // 토큰 만료 시 자동 재발급 시도
+    if (response.status === 401) {
+      try {
+        const refreshResp = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (refreshResp.ok) {
+          const { access_token }: { access_token: string } = await refreshResp.json();
+          localStorage.setItem("token", access_token);
+          response = await doRequest(access_token);
+        }
+      } catch {
+        // ignore; 실패 시 아래서 handler 진행
+      }
+    }
 
     if (!response.body) return;
 

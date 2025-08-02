@@ -8,6 +8,7 @@ from sqlmodel import Field, SQLModel, Relationship
 
 
 class UserPlan(SQLModel, table=True):
+    __tablename__ = "user_plan"
     """사용자별 활성 요금제."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -22,14 +22,35 @@ export function useChatSession() {
       form.append("session_id", current.id);
     }
     if (payload.text) form.append("text", payload.text);
-    if (payload.game) form.append("game", payload.game);
+    if (payload.game && (payload.game === "lol" || payload.game === "pubg")) {
+      form.append("game", payload.game);
+    }
     payload.files?.forEach((f) => form.append("image", f, f.name));
 
-    const res = await fetch("/api/coach/ask/stream", {
-      method: "POST",
-      body: form,
-      credentials: "include",
-    });
+    async function doRequest(accessToken?: string): Promise<Response> {
+      return fetch(`${import.meta.env.VITE_API_BASE_URL}/api/coach/ask/stream`, {
+        method: "POST",
+        body: form,
+        credentials: "include",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
+    }
+
+    let res = await doRequest(localStorage.getItem("token") || undefined);
+
+    if (res.status === 401) {
+      try {
+        const refreshResp = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (refreshResp.ok) {
+          const { access_token }: { access_token: string } = await refreshResp.json();
+          localStorage.setItem("token", access_token);
+          res = await doRequest(access_token);
+        }
+      } catch {}
+    }
 
     const sid = res.headers.get("X-Chat-Session");
     if (sid) {

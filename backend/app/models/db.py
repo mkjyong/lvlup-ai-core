@@ -1,5 +1,4 @@
 """데이터베이스 엔진 & 세션 팩토리."""
-from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from sqlmodel import SQLModel, create_engine
@@ -38,8 +37,16 @@ sync_engine = create_engine(_settings.DATABASE_URL, echo=_settings.DEBUG, pool_p
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker
 import ssl as _ssl
+from pathlib import Path
 
-_ssl_ctx = _ssl.create_default_context()
+# ------------------------------
+# Supabase CA – prod-ca-2021.crt
+# ------------------------------
+_ca_path = Path(__file__).resolve().parent.parent / "prod-ca-2021.crt"
+if _ca_path.exists():
+    _ssl_ctx = _ssl.create_default_context(cafile=str(_ca_path))
+else:
+    _ssl_ctx = _ssl.create_default_context()
 
 async_engine: AsyncEngine = create_async_engine(
     db_url,
@@ -61,12 +68,28 @@ async def init_db() -> None:  # noqa: D401
         await conn.run_sync(SQLModel.metadata.create_all)
 
 
+from contextlib import asynccontextmanager
+
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI 의존성용 비동기 세션 Yielder."""
-
+    """비동기 세션 ContextManager – 기존 코드(`async with get_session()`) 호환."""
     async with AsyncSessionLocal() as session:  # type: ignore[assignment]
         try:
             yield session
         finally:
-            await session.close() 
+            await session.close()
+
+# ----------------------------------------------------------------------------
+# FastAPI Dependency Wrapper
+# ----------------------------------------------------------------------------
+async def get_session_dep() -> AsyncGenerator[AsyncSession, None]:
+    """Depends 전용. 내부에서 `get_session` ContextManager를 열어 세션 객체를 yield한다."""
+    async with get_session() as session:
+        yield session
+
+# Re-export 기본 이름 유지
+__all__ = [
+    "get_session",  # Context manager
+    "get_session_dep",  # FastAPI Depends
+]
+ 

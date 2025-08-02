@@ -11,6 +11,7 @@ from sqlmodel import Field, SQLModel
 
 
 class GameKnowledge(SQLModel, table=True):
+    __tablename__ = "game_knowledge"
     """게임 전략 문서 임베딩 청크."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

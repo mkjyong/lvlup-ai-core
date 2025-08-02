@@ -101,17 +101,35 @@ CREATE INDEX IF NOT EXISTS idx_game_asset_game ON game_asset(game);
 CREATE INDEX IF NOT EXISTS idx_game_asset_type ON game_asset(type);
 
 -- --------------------------------------------------
+-- Table: chat_session
+-- --------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_session (
+    id              TEXT PRIMARY KEY,
+    user_google_sub TEXT NOT NULL REFERENCES "user" (google_sub) ON DELETE CASCADE,
+    model           TEXT NOT NULL DEFAULT 'gemini-2.5-flash',
+    system_prompt   TEXT NOT NULL,
+    title           TEXT,
+    context_cache_id TEXT,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_session_user ON chat_session(user_google_sub);
+CREATE INDEX IF NOT EXISTS idx_chat_session_last_used ON chat_session(last_used_at);
+
+-- --------------------------------------------------
 -- Table: chat_message
 -- --------------------------------------------------
 CREATE TABLE IF NOT EXISTS chat_message (
     id              SERIAL PRIMARY KEY,
     user_google_sub TEXT NOT NULL REFERENCES "user" (google_sub) ON DELETE CASCADE,
+    session_id      TEXT REFERENCES chat_session(id) ON DELETE CASCADE,
     question        TEXT NOT NULL,
     answer          TEXT NOT NULL,
     game            TEXT NOT NULL DEFAULT 'generic',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chat_message_user ON chat_message(user_google_sub);
+CREATE INDEX IF NOT EXISTS idx_chat_message_session ON chat_message(session_id);
 CREATE INDEX IF NOT EXISTS idx_chat_message_game ON chat_message(game);
 
 -- --------------------------------------------------

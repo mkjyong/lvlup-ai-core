@@ -7,6 +7,7 @@ from sqlalchemy import UniqueConstraint as SAUniqueConstraint
 from sqlmodel import Field, SQLModel, Relationship
 
 class GameAccount(SQLModel, table=True):
+    __tablename__ = "game_account"
     """유저의 게임별 계정 ID 저장."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

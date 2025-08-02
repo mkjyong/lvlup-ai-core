@@ -16,16 +16,23 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+import os
 from dataclasses import dataclass
 from typing import AsyncIterator, List, Optional, Tuple
+from app.services.genai_client import genai, client as genai_client, types
 
-import google.generativeai as genai  # type: ignore
+# Ensure API key configured early
 
 from app.models.chat_session import ChatSession
 from app.models.db import get_session
 from app.services import prompt as prompt_service
 from app.services.llm_session_pool import get_chat
+from concurrent.futures import ThreadPoolExecutor
 
+# 전역 한정 ThreadPool – 무제한 스레드 스폰 방지
+_STREAM_EXECUTOR = ThreadPoolExecutor(
+    max_workers=int(os.getenv("STREAM_WORKERS", "64"))
+)
 # ---------------------------------------------------------------------------
 # Helper – 모델 선택
 # ---------------------------------------------------------------------------
@@ -37,6 +44,22 @@ def select_model(game: Optional[str]) -> str:  # noqa: D401
         return "gemini-2.5-flash"
     return "gemini-2.5-flash-lite"
 
+
+# ---------------------------------------------------------------------------
+# Helper – flatten contents for token calc / debug
+# ---------------------------------------------------------------------------
+from typing import List, Dict, Any
+
+def _flatten_contents(contents: List[Dict[str, Any]]) -> str:  # noqa: D401
+    """parts 안의 plain text 를 모두 이어붙여 디버그/토큰계산용 문자열 반환"""
+    buf: List[str] = []
+    for c in contents:
+        for p in c.get("parts", []):
+            if isinstance(p, str):
+                buf.append(p)
+            elif isinstance(p, dict) and "text" in p:
+                buf.append(str(p["text"]))
+    return "\n".join(buf)
 
 # ---------------------------------------------------------------------------
 # Main Pipeline – minimal streaming
@@ -54,7 +77,7 @@ class RagPipeline:  # noqa: D101 – simple wrapper
         plan_tier: str = "free",  # plan_tier 는 quota 체크용 – 현재 로직에선 미사용
         game: str | None = None,
         prompt_type: str | None = None,
-        images: List[genai.Part] | None = None,
+        images: List[types.Part] | None = None,
         session_id: str | None = None,
     ) -> Tuple[ChatSession, AsyncIterator[str]]:
         """스트리밍 응답을 위한 단일 엔트리 포인트.
@@ -71,7 +94,7 @@ class RagPipeline:  # noqa: D101 – simple wrapper
             게임 타입(lol | pubg 등). 모델 선택에 활용.
         prompt_type : str | None, optional
             시스템 프롬프트 종류(generic | lol | pubg …).
-        images : list[genai.Part] | None, optional
+        images : list[types.Part] | None, optional
             이미지 Part 리스트 (multimodal 입력). None 이면 텍스트 전용.
         session_id : str | None, optional
             기존 세션 ID. 없으면 새로 생성.
@@ -103,9 +126,9 @@ class RagPipeline:  # noqa: D101 – simple wrapper
 
                 sys_prompt = prompt_service.get_system_prompt(p_enum)
 
-                gen_model = genai.GenerativeModel(model)
-                cache_resp = await asyncio.to_thread(gen_model.cache_context, sys_prompt)
-                cache_id = getattr(cache_resp, "cache_id", None)
+                # Gemini SDK v1 – client 기반으로 변경했으므로 미리 모델 인스턴스를 만들 필요 없음.
+                # 📌 context caching은 당장 사용하지 않음
+                cache_id: str | None = None
 
                 sess = ChatSession(
                     id=str(uuid.uuid4()),
@@ -118,18 +141,66 @@ class RagPipeline:  # noqa: D101 – simple wrapper
                 await db.commit()
 
         # -------------------------------------------------------------------
-        # 2) Gemini Chat 객체 준비
+        # 2) 이전 대화 history 로드 (generate_content 용)
         # -------------------------------------------------------------------
-        from app.services.llm_session_pool import get_chat_with_history
-        chat = await get_chat_with_history(sess)  # LRU cache + DB history
+        from app.services.llm_session_pool import get_history_contents, _DEFAULT_TOOLS
 
-        # 사용자 입력 파트 구성 (multimodal)
-        parts: list = list(images) if images else []
-        parts.append(question)
+        history_contents = await get_history_contents(sess)
 
         # -------------------------------------------------------------------
-        # 3) Streaming 호출 및 반환
+        # 3) 사용자 입력 파트 구성 (multimodal)
         # -------------------------------------------------------------------
-        stream_iter = chat.send_message_stream(parts)
+        user_parts: list = list(images) if images else []
+        user_parts.append(question)
+        history_contents.append({"role": "user", "parts": user_parts})
 
-        return sess, stream_iter
+        # -------------------------------------------------------------------
+        # 4) Gemini generate_content(스트리밍) 호출
+        # -------------------------------------------------------------------
+        # Google GenAI SDK v1 사용 – Client 기반 호출로 변경
+        client = genai_client
+        gen_conf = {
+            "candidate_count": 1,
+            "max_output_tokens": 5000,
+        }
+
+        # --- Blocking -> Async 변환 -----------------------------------------
+        import asyncio
+        import structlog
+        logger = structlog.get_logger(__name__)
+
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        logger.info("gemini_request_init", history_len=len(history_contents), prompt_preview=_flatten_contents(history_contents)[:200])
+
+        def _worker() -> None:
+            try:
+                for chunk in client.models.generate_content(
+                    model=sess.model,
+                    contents=history_contents,
+                    stream=True,
+                    tools=_DEFAULT_TOOLS,
+                    generation_config=types.GenerationConfig(**gen_conf),
+                ):
+                    text = getattr(chunk, "text", None)
+                    if text:
+                        logger.debug("gemini_chunk", text=text)
+                        loop.call_soon_threadsafe(queue.put_nowait, text)
+            except Exception as e:
+                logger.error("gemini_stream_error", err=str(e), exc_info=True)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        # 전역 executor 재활용 (llm 모듈과 동일 로직)
+        _STREAM_EXECUTOR.submit(_worker)
+
+        async def _iter() -> AsyncIterator[str]:  # noqa: D401
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                logger.debug("send_token_to_client", token=item)
+                yield item
+
+        return sess, _iter()

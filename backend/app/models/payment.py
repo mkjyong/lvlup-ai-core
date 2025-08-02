@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel
 
 
 class PaymentLog(SQLModel, table=True):
+    __tablename__ = "payment_log"
     """결제/구독 이벤트 로그."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel
 
 
 class ChatSession(SQLModel, table=True):
+    __tablename__ = "chat_session"
     id: Optional[str] = Field(default=None, primary_key=True, max_length=64)
     user_google_sub: str = Field(index=True)
     model: str = Field(max_length=50, default="gemini-2.5-flash")

@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel
 
 
 class GameAsset(SQLModel, table=True):
+    __tablename__ = "game_asset"
     id: Optional[int] = Field(default=None, primary_key=True)
     game: str = Field(index=True)  # e.g., lol, pubg
     type: str = Field(index=True)  # e.g., champion, item, weapon

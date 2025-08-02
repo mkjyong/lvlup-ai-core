@@ -2,6 +2,7 @@ import React from 'react';
 import { useTheme } from '../hooks/useTheme';
 import ReferralSection from '../components/ReferralSection';
 import GameAccountSection from '../components/GameAccountSection';
+import SubscriptionSection from '../components/SubscriptionSection';
 import { FaPalette, FaUserFriends } from 'react-icons/fa';
 
 const SettingsPage: React.FC = () => {
@@ -31,6 +32,8 @@ const SettingsPage: React.FC = () => {
 
           {/* Game account card */}
           <GameAccountSection />
+          {/* Subscription card */}
+          <SubscriptionSection />
           {/* Referral card */}
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md shadow-soft">
             <div className="mb-4 flex items-center gap-2 text-lg font-semibold">

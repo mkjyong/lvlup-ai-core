@@ -6,8 +6,10 @@
 from functools import lru_cache
 from typing import Any
 import os
+import sys
 
-from pydantic import BaseSettings, validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import validator, field_validator  # Pydantic v2
 
 
 class Settings(BaseSettings):
@@ -22,7 +24,14 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # === 데이터베이스 ===
-    DATABASE_URL: str = "sqlite+aiosqlite:///./dev.db"
+    # 개별 컴포넌트로 분리해 설정 가능. DATABASE_URL 이 비어 있으면 아래 값을 조합해 DSN 생성.
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    DB_NAME: str = "postgres"
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = ""
+
+    DATABASE_URL: str | None = None
 
     # === Redis / Cache ===
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -42,13 +51,21 @@ class Settings(BaseSettings):
     PORTONE_BASE_URL: str = "https://api.portone.io"
     PORTONE_WEBHOOK_SECRET: str = ""
 
+    # === Slack Webhooks ===
+    SLACK_WEBHOOK_SUBSCRIPTION_TRACKER: str | None = None
+    SLACK_WEBHOOK_UNSUBSCRIPTION_TRACKER: str | None = None
+    SLACK_WEBHOOK_ALERT_BACKEND_ERR: str | None = None
+
     # NOTE: 아래 필드들은 테스트/로컬 환경에서는 기본값을 허용한다.
-    import sys
     _IS_TEST_ENV: bool = (
         os.getenv("PYTEST_CURRENT_TEST") is not None
         or os.getenv("ENVIRONMENT", "prod").lower() in {"test", "local"}
         or "pytest" in sys.modules
     )
+
+    print("asdfadsf" , os.getenv("ENVIRONMENT", "prod"))
+    print("asdfadsf" , os.getenv("SLACK_WEBHOOK_SUBSCRIPTION_TRACKER"))
+ 
 
     if _IS_TEST_ENV:
         # 안전하지 않은 기본값 – 테스트에서만 사용
@@ -112,29 +129,56 @@ class Settings(BaseSettings):
     # === DB 커넥션 풀 ===
     DB_POOL_SIZE: int = 10
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
 
-    # 추가 검증 예시
+    # Pydantic v2 설정 메타
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",  # 환경 변수 중 선언되지 않은 값은 무시
+    )
+
+    # DATABASE_URL 조합 & 검증
+    @validator("DATABASE_URL", pre=True, always=True)
+    def _compose_database_url(cls, v: str | None, values: dict[str, any]):  # noqa: D401, ANN001
+        """빈 값이면 개별 DB_* 설정으로 DSN 자동 생성.
+
+        결과 DSN 은 비동기 드라이버(asyncpg) 접두사를 포함한다.
+        """
+        if v and v.strip():
+            # asyncpg 접두사 강제
+            if v.startswith("postgresql://") and "+asyncpg" not in v:
+                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return v
+
+        host = values.get("DB_HOST")
+        port = values.get("DB_PORT")
+        name = values.get("DB_NAME")
+        user = values.get("DB_USER")
+        password = values.get("DB_PASSWORD")
+        if host and user and password is not None:
+            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+
+        # fallback: sqlite 로컬 파일
+        return "sqlite+aiosqlite:///./dev.db"
+
+    # 추가 검증 예시(남겨 둠)
     @validator("DATABASE_URL")
     def _validate_db_url(cls, v: str) -> str:  # noqa: D401
-        """데이터베이스 URL 기본 값 경고."""
         if v.startswith("sqlite"):
             # sqlite는 dev 용으로만 사용 권장
             return v
         return v
 
     # 필수 시크릿 키 검증
-    @validator("EMAIL_ENC_KEY", "JWT_SECRET")
-    def _require_secret(cls, v: str, field):  # noqa: D401
+    @field_validator("EMAIL_ENC_KEY", "JWT_SECRET")
+    def _require_secret(cls, v: str, info):  # noqa: D401
         is_test = os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("ENVIRONMENT", "prod").lower() in {"test", "local"}
         if not v or v in {"", "change-me", "please-change-me"}:
             if is_test:
                 # 테스트 용도로 allow
                 return v or "test-default"
-            raise ValueError(f"{field.name} 환경변수가 설정되지 않았거나 기본값을 사용하고 있습니다.")
+            raise ValueError(f"{info.field_name} 환경변수가 설정되지 않았거나 기본값을 사용하고 있습니다.")
         return v
 
     # DOMAIN_BASE_URL 필수 검증 (프로덕션만)
@@ -180,17 +224,7 @@ MODEL_CATEGORY: dict[str, str] = {
     "gemini-2.5-flash": "special",
 }
 
-PLAN_CALL_LIMITS: dict[str, dict[str, dict[str, int]]] = {
-    "free": {
-        "general": {"weekly": 30, "monthly": 200},
-    },
-    "basic": {
-        "general": {"weekly": 200, "monthly": 800},
-        "special": {"monthly": 100},
-    },
-}
+# PLAN_CALL_LIMITS deprecated – limits are now stored per-plan in DB (plan_tier table)
 
-PLAN_TOKEN_LIMITS: dict[str, dict[str, int]] = {
-    "free": {"prompt": 500, "completion": 1000},
-    "basic": {"prompt": 1000, "completion": 2000},
-} 
+# PLAN_TOKEN_LIMITS deprecated – handled via PlanTier
+ 

@@ -7,6 +7,7 @@ from sqlmodel import Field, SQLModel, Relationship
 
 
 class Referral(SQLModel, table=True):
+    __tablename__ = "referral"
     """유저 초대(레퍼럴) 기록."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

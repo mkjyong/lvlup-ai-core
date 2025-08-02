@@ -7,6 +7,7 @@ from sqlalchemy import Column, JSON
 from sqlmodel import Field, SQLModel, Relationship
 
 class MatchCache(SQLModel, table=True):
+    __tablename__ = "match_cache"
     """외부 API에서 가져온 원본 매치/전적 JSON 캐시."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

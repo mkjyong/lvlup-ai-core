@@ -48,8 +48,6 @@ pip install -r requirements.txt
 `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:5432/ai_coach`
 `EMAIL_ENC_KEY` | 32-byte urlsafe_base64 (Fernet)
 `JWT_SECRET` | JWT 서명용 시크릿 문자열
-`REVENUECAT_API_KEY` | RevenueCat 서버 API Key
-`REVENUECAT_WEBHOOK_SECRET` | RevenueCat Webhook HMAC Secret
 `DOMAIN_BASE_URL` | ex) `https://app.example.com`
 
 > **Tip**  
@@ -65,7 +63,7 @@ export PYTHONPATH=.
 
 # FastAPI (hot-reload)
 # 1) 레포 루트(lvlup-ai-core) 위치에서 실행
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 1100
 
 # 2) 혹은 backend 디렉터리 내부에서 실행
 # uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -123,17 +121,6 @@ alembic upgrade head
 
 ---
 
-## 💳 결제 & 구독 (RevenueCat)
-
-플로우 | 설명
--------|------
-Checkout | `POST /billing/initiate` → RevenueCat `/v1/checkouts` 호출 후 `checkout_url` 반환
-Webhook | RevenueCat → `POST /billing/notify` : Webhook 서명(HMAC-SHA256) 검증 후 결제/만료 처리
-재시도 | Checkout 생성 실패 시 Celery 태스크가 6h 간격, 2회 재시도
-취소 | `POST /billing/cancel` → 구독 취소(잔여 기간 유지)  
-만료 | Webhook `EXPIRATION` 이벤트 수신 시 `plan_tier` → `free`
-
----
 
 ## 🧪 테스트
 

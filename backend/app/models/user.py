@@ -21,6 +21,7 @@ class User(SQLModel, table=True):
     referral_code: str | None = Field(default=None, index=True, sa_column_kwargs={"unique": True})
     referral_credits: int = 0
 
+
     # Relationships omitted in test context to avoid mapper initialization issues.
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

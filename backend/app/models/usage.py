@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel
 
 
 class LLMUsage(SQLModel, table=True):
+    __tablename__ = "llm_usage"
     id: Optional[int] = Field(default=None, primary_key=True)
     user_google_sub: str = Field(index=True)
     model: str

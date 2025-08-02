@@ -139,8 +139,11 @@ const currency = isKorean ? 'KRW' : 'USD';
             ) : (
               <p className="mb-6 text-4xl font-bold text-accent drop-shadow">
                 {currency === 'KRW'
-                  ? `₩${Math.round(offerings[period].priceKrw * 1.1).toLocaleString()} / 월 (VAT 포함)`
+                  ? `₩${offerings[period].priceKrw.toLocaleString()} / 월`
                   : `$${offerings[period].priceUsd} / 월`}
+                {currency === 'KRW' && (
+                  <span className="ml-1 align-baseline text-xs text-muted">(VAT 별도)</span>
+                )}
               </p>
             )}
 
@@ -167,14 +170,7 @@ const currency = isKorean ? 'KRW' : 'USD';
             >
               {loadingId === offerings[period].id ? '로딩...' : '구매하기'}
             </button>
-            <button
-              type="button"
-              className="w-full rounded border border-red-500 py-3 font-semibold text-red-500 hover:bg-red-500/10 text-sm"
-              onClick={cancelSubscription}
-              disabled={!subInfo?.payment_id || !['payment_succeeded','paid'].includes(subInfo.status || '')}
-            >
-              {subInfo?.status === 'processing' ? '해지 요청 중…' : '구독 해지하기'}
-            </button>
+
           </div>
         </div>
       </main>

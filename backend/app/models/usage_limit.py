@@ -5,6 +5,7 @@ from sqlmodel import Field, SQLModel
 
 
 class UsageLimit(SQLModel, table=True):
+    __tablename__ = "usage_limit"
     """사용자 기간별 사용량 집계 스냅샷."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -47,8 +47,6 @@ pip install -r backend/requirements.txt
 | DATABASE_URL | `postgresql+asyncpg://user:pass@host:5432/db` |
 | EMAIL_ENC_KEY | 32-byte urlsafe_base64 (Fernet) |
 | JWT_SECRET | JWT 서명 키 |
-| REVENUECAT_API_KEY | RevenueCat API Key |
-| REVENUECAT_WEBHOOK_SECRET | RevenueCat Webhook HMAC Secret |
 | DOMAIN_BASE_URL | ex) https://app.example.com |
 
 기타 값들은 필요에 따라 수정하거나 그대로 사용해도 됩니다.

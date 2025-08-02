@@ -17,7 +17,6 @@ from app.models.db import init_db
 from app.config import get_settings
 from app.middleware.quota import QuotaMiddleware
 from app.middleware.request_id import RequestIDMiddleware
-from app.middleware.geoip import GeoIPMiddleware
 from app.deps import get_current_user
 from fastapi import Request, HTTPException, status
 
@@ -36,7 +35,7 @@ def create_app() -> FastAPI:
 
     # 미들웨어: quota
     app.add_middleware(RequestIDMiddleware)
-    app.add_middleware(GeoIPMiddleware)
+    # GeoIP 미들웨어 제거됨 – 언어 기반 분기 사용
     app.add_middleware(QuotaMiddleware)
 
     # CORS – 허용 Origin 을 환경변수 `CORS_ALLOW_ORIGINS`(쉼표 구분) 로 관리
@@ -82,9 +81,6 @@ def create_app() -> FastAPI:
     from app.routers import chat as chat_router
     app.include_router(chat_router.router)
 
-    # Simple email/password mock router (primarily for tests)
-    from app.routers import auth_mock as auth_mock_router  # type: ignore
-    app.include_router(auth_mock_router.router)
 
     # 예외 핸들러 등록
     register_exception_handlers(app)

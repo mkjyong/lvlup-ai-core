@@ -7,6 +7,7 @@ from sqlalchemy import Column, JSON
 from sqlmodel import Field, SQLModel, Relationship
 
 class PerformanceStats(SQLModel, table=True):
+    __tablename__ = "performance_stats"
     """주간/월간 집계된 게임 성과 지표."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

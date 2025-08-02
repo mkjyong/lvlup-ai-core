@@ -5,6 +5,7 @@ from sqlmodel import Field, SQLModel
 
 
 class ChatMessage(SQLModel, table=True):
+    __tablename__ = "chat_message"
     """사용자 질문/답변 히스토리."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

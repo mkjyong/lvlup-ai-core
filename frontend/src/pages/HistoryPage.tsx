@@ -47,6 +47,9 @@ const HistoryPage: React.FC = () => {
     <div className="flex h-screen flex-col bg-bg text-text">
       <header className="border-b border-border p-4 text-xl font-display">히스토리</header>
       <main className="flex-1 overflow-y-auto p-4">
+        {items.length === 0 && !hasMore && (
+          <div className="flex h-full items-center justify-center text-muted">히스토리가 없습니다.</div>
+        )}
         {items.map((item) => (
           <div key={item.id} className="mb-6 rounded border border-transparent transition-colors hover:border-accent/40 hover:bg-white/5 hover:backdrop-blur-sm">
             <ChatBubble message={{ id: `${item.id}-q`, role: 'user', text: item.question }} />

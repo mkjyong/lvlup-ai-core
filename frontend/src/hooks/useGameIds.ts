@@ -6,6 +6,11 @@ export const useGameIds = () => {
   const query = useQuery({
     queryKey: ['gameIds'],
     queryFn: fetchGameIds,
+    staleTime: Infinity, // 세션 동안 캐시 유지 (수동 invalidation)
+    cacheTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const mutation = useMutation({

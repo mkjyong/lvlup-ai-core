@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel, Index
 
 
 class RawData(SQLModel, table=True):
+    __tablename__ = "raw_data"
     """추출된 원본 텍스트를 일시 저장하는 Stage1 테이블."""
 
     id: Optional[int] = Field(default=None, primary_key=True)

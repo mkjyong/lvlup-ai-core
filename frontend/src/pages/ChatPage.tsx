@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { v4 as uuid } from 'uuid';
 import ChatBubble, { ChatMessage } from '../components/ChatBubble';
 import GameToggle from '../components/GameToggle';
-import SessionSidebar from '../components/SessionSidebar';
 import AccountBar from '../components/AccountBar';
 import { useGameIds } from '../hooks/useGameIds';
 import { useChatSession } from '../hooks/useChatSession';
@@ -149,7 +148,6 @@ const ChatPage: React.FC = () => {
 
   return (
    <div className={`flex h-full bg-bg text-text ${isDragging ? 'ring-4 ring-primary/40' : ''}`}>
-     <SessionSidebar />
      <div className="flex flex-1 flex-col"
       onDragOver={(e) => {
         e.preventDefault();

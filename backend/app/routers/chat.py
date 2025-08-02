@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import List
 
-import google.generativeai as genai  # type: ignore
+from app.services.genai_client import genai, types
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
