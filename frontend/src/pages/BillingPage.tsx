@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useSubscription } from '../hooks/useSubscription';
+import Modal from '../components/ui/Modal';
 import api from '../api/client';
+import PortOne from "@portone/browser-sdk/v2";
+import { toast } from 'react-hot-toast';
 
 // 상품 정보는 백엔드 API 로부터 받아올 수도 있지만, MVP 단계에서는 하드코딩
 // KR: 24,200원(VAT포함) / 월   |  글로벌: $15 / mo
@@ -24,75 +28,111 @@ const BillingPage: React.FC = () => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [error, setError] = useState<string | null>(null);
+  const [paypalUILoaded, setPayPalUILoaded] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
 
   // 간단 국가 판별(ko-KR, ko 등) – 실제로는 IP Geo API 가 더 정확
-const isKorean = false; //navigator.language.startsWith('ko');
+// const isKorean = typeof navigator !== 'undefined' && navigator.language.startsWith('ko');
+const isKorean = false;
 const currency = isKorean ? 'KRW' : 'USD';
 
   const initiateCheckout = async () => {
-    try {
-      setLoadingId('subscribe');
-      const PortOne = (await import('@portone/browser-sdk/v2')).default;
+    // 한국(카드) vs 글로벌(PayPal) 분기 처리
+    setError(null);
+    setLoadingId('subscribe');
 
-      const billingKeyMethod = isKorean ? 'CARD' : 'PAYPAL';
-      const channelKey: string | undefined = isKorean
-        ? (import.meta.env.VITE_PORTONE_CHANNEL_KEY_CARD as string | undefined)
-        : (import.meta.env.VITE_PORTONE_CHANNEL_KEY_PAYPAL as string | undefined);
+    const storeId = import.meta.env.VITE_PORTONE_STORE_ID as string;
+    const issueName = 'LvLUp Basic Subscription';
+    const issueId = `sub-${Date.now()}`;
+    const redirectUrl = window.location.href;
 
-      const reqBody: Record<string, unknown> = {
-        storeId: import.meta.env.VITE_PORTONE_STORE_ID as string,
-        billingKeyMethod,
-        // 창 타입 명시: 모바일/PC 환경에 따라 팝업 또는 리다이렉트 지정 필요
-        windowType: {
-          pc: "POPUP",
-          mobile: "REDIRECTION",
-        },
-        redirectUrl: window.location.href,
-      };
-      if (channelKey) {
-        reqBody.channelKey = channelKey;
+    const channelKey: string | undefined = isKorean
+      ? (import.meta.env.VITE_PORTONE_CHANNEL_KEY_CARD as string | undefined)
+      : (import.meta.env.VITE_PORTONE_CHANNEL_KEY_PAYPAL as string | undefined);
+
+    if (isKorean) {
+      // ----------------------------------------------------
+      // 🇰🇷 카드 빌링키 발급 (requestIssueBillingKey)
+      // ----------------------------------------------------
+      try {
+        const reqBody = {
+          storeId,
+          billingKeyMethod: 'EASY_PAY',
+          issueName,
+          issueId,
+          redirectUrl,
+          ...(channelKey ? { channelKey } : {}),
+        } as Parameters<typeof PortOne.requestIssueBillingKey>[0];
+
+        const issue: any = await PortOne.requestIssueBillingKey(reqBody);
+
+        if (issue.code !== undefined) throw new Error(issue.message);
+
+        await api.post('/billing/store-billing-key', {
+          billing_key: issue.billingKey,
+          customer_id: issue.customer?.id,
+          channel_key: channelKey,
+        });
+
+        setSuccessModalOpen(true);
+        refetch();
+      } catch (err) {
+        console.error(err);
+        setError('결제 과정에서 오류가 발생했습니다.');
+      } finally {
+        setLoadingId(null);
       }
-
-      const issue: any = await PortOne.requestIssueBillingKey(reqBody as any);
-      if (issue.code !== undefined) throw new Error(issue.message);
-
-      await api.post('/billing/store-billing-key', {
-        billing_key: issue.billingKey,
-        customer_id: issue.customer?.id,
-        channel_key: channelKey,
-      });
-      alert('구독이 활성화되었습니다!');
-      loadSubscription();
-    } catch (err) {
-      console.error(err);
-      setError('결제 과정에서 오류가 발생했습니다.');
-    } finally {
-      setLoadingId(null);
+    } else {
+      // ----------------------------------------------------
+      // 🌐 PayPal 빌링키 발급 (loadIssueBillingKeyUI – PAYPAL_RT)
+      // ----------------------------------------------------
+      try {
+        await PortOne.loadIssueBillingKeyUI(
+          {
+            uiType: 'PAYPAL_RT',
+            storeId,
+            billingKeyMethod: 'PAYPAL',
+            issueName,
+            issueId,
+            redirectUrl,
+            channelKey: channelKey as string,
+          },
+          {
+            onIssueBillingKeySuccess: async (response) => {
+              try {
+                await api.post('/billing/store-billing-key', {
+                  billing_key: response.billingKey,
+                  channel_key: channelKey,
+                });
+                setSuccessModalOpen(true);
+                refetch();
+              } catch (apiErr) {
+                console.error(apiErr);
+                setError('서버 저장 중 오류가 발생했습니다.');
+              } finally {
+                setLoadingId(null);
+              }
+            },
+            onIssueBillingKeyFail: (error) => {
+              console.error(error);
+              setError(error.message || '결제 과정에서 오류가 발생했습니다.');
+              setLoadingId(null);
+            },
+          },
+        );
+        setPayPalUILoaded(true);
+      } catch (err) {
+        console.error(err);
+        setError('결제 UI 로드 중 오류가 발생했습니다.');
+        setLoadingId(null);
+      }
     }
   };
 
-  interface SubscriptionInfo {
-  payment_id?: string;
-  expires_at?: string;
-  status?: string;
-  amount_usd?: number;
-  currency?: string;
-}
+  
 
-  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
-
-  const loadSubscription = async () => {
-    try {
-      const { data } = await api.get('/billing/active');
-      setSubInfo(data);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  useEffect(() => {
-    loadSubscription();
-  }, []);
+  const { subInfo, cancel, refetch } = useSubscription();
+  const isSubscribed = !!subInfo?.payment_id && subInfo.status !== 'payment_failed';
 
   // expiresAt 배너용 계산
   const expiresBanner = useMemo(() => {
@@ -107,13 +147,13 @@ const currency = isKorean ? 'KRW' : 'USD';
     if (!subInfo?.payment_id) return;
     if (!window.confirm('정말 구독을 해지하시겠습니까?')) return;
     try {
-      await api.post('/billing/cancel', { payment_id: subInfo.payment_id });
-      alert('구독이 해지되었습니다');
-      loadSubscription();
+      await cancel(subInfo.payment_id);
+      toast.success('구독이 해지되었습니다');
+      refetch();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(err);
-      alert('해지 실패: ' + (err as Error).message);
+      toast.error('해지 실패: ' + (err as Error).message);
     }
   };
 
@@ -181,24 +221,60 @@ const currency = isKorean ? 'KRW' : 'USD';
                 <span className="text-accent">✔</span> 게임 특화 코칭(LOL, 배그 등 지속 추가)
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span> 개인 맞춤 목표 & 코칭
+                <span className="text-accent">✔</span> 개인 맞춤 목표 & 코칭(9월 예정)
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-accent">✔</span> 최신 패치 인사이트 제공
               </li>
             </ul>
-            <button
-              type="button"
-              className="w-full mb-3 rounded bg-primary py-3 font-semibold text-bg disabled:opacity-50 motion-safe:hover:shadow-[0_0_8px_var(--color-accent)]"
-              onClick={initiateCheckout}
-              disabled={loadingId === offerings[period].id}
-            >
-              {loadingId === offerings[period].id ? '로딩...' : '구매하기'}
-            </button>
+            {isSubscribed ? (
+              <button
+                type="button"
+                className="w-full mb-3 rounded bg-red-600 py-3 font-semibold text-bg disabled:opacity-50 motion-safe:hover:shadow-[0_0_8px_var(--color-accent)]"
+                onClick={cancelSubscription}
+              >
+                구독 해지하기
+              </button>
+            ) : (
+              isKorean ? (
+              <button
+                type="button"
+                className="w-full mb-3 rounded bg-primary py-3 font-semibold text-bg disabled:opacity-50 motion-safe:hover:shadow-[0_0_8px_var(--color-accent)]"
+                onClick={initiateCheckout}
+                disabled={loadingId === offerings[period].id}
+              >
+                {loadingId === offerings[period].id ? '로딩...' : '구매하기'}
+              </button>
+            ) : (
+              <>
+                {!paypalUILoaded && (
+                  <button
+                    type="button"
+                    className="w-full mb-3 rounded bg-primary py-3 font-semibold text-bg disabled:opacity-50 motion-safe:hover:shadow-[0_0_8px_var(--color-accent)]"
+                    onClick={initiateCheckout}
+                    disabled={loadingId === offerings[period].id}
+                  >
+                    {loadingId === offerings[period].id ? '로딩...' : 'PayPal로 결제하기'}
+                  </button>
+                )}
+                {/* PayPal 버튼 렌더링 컨테이너 */}
+                <div className="portone-ui-container flex justify-center my-4" />
+              </>
+            ))}
 
           </div>
         </div>
       </main>
+      <Modal open={successModalOpen} onClose={() => setSuccessModalOpen(false)}>
+        <h3 className="mb-4 text-lg font-bold">구독이 활성화되었습니다!</h3>
+        <button
+          type="button"
+          className="w-full rounded bg-primary py-2 font-semibold text-bg"
+          onClick={() => setSuccessModalOpen(false)}
+        >
+          확인
+        </button>
+      </Modal>
     </div>
   );
 };
