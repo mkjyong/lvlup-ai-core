@@ -26,6 +26,9 @@ def decrypt_email(token: str) -> str:
     try:
         return _fernet.decrypt(token.encode()).decode()
     except InvalidToken as exc:
+        # 평문 이메일이 저장된 경우 복호화 대신 그대로 사용
+        if "@" in token:
+            return token
         _logger.error("Invalid email decrypt token")
         raise exc
 

@@ -94,7 +94,7 @@ def _normalize_contents(prompt: str | Iterable[str]) -> List[types.Content]:
     """Convert str or iterable[str] into SDK `Content` list with role=user."""
     if isinstance(prompt, str):
         prompt = [prompt]
-    return [types.Content(role="user", parts=[types.Part.from_text(p)]) for p in prompt]
+    return [types.Content(role="user", parts=[types.Part(text=p)]) for p in prompt]
 
 
 def generate_text(model_name: str, prompt: str | Iterable[str], **kwargs: Any) -> str:

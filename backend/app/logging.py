@@ -48,7 +48,13 @@ def init_logging(force: bool = False) -> None:  # noqa: D401
     # -----------------------------------------
     # httpx / httpcore 디버그 트레이스, uvicorn.error 등을 WARNING 이상으로 올려
     # 접근 로그(uvicorn.access)만 INFO 레벨로 남긴다.
-    noisy_libs = ("httpx", "httpcore", "uvicorn.error")
+    noisy_libs = (
+        "httpx",
+        "httpcore",
+        "uvicorn.error",
+        "python_multipart.multipart",
+        "google.genai",
+    )
     for name in noisy_libs:
         logging.getLogger(name).setLevel(logging.WARNING)
 

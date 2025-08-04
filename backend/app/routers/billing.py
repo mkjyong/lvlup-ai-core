@@ -5,7 +5,6 @@ import json
 from app.config import get_settings
 
 from app.services import portone as billing
-from app.tasks.payments import create_checkout_with_retry
 from app.models.plan_tier import PlanTier
 from app.models.user import User
 from app.deps import get_current_user
@@ -18,30 +17,6 @@ from sqlmodel import select
 router = APIRouter(prefix="/billing", tags=["billing"])
 settings = get_settings()
 
-
-class PaymentRequest(BaseModel):
-    offering_id: str  # PlanTier ID
-    currency: str = "USD"  # ISO 4217 (e.g., USD, KRW)
-
-
-class PaymentInitResponse(BaseModel):
-    checkout_url: str
-
-
-@router.post("/initiate", response_model=PaymentInitResponse)
-async def initiate_payment(payload: PaymentRequest, user: User = Depends(get_current_user)):
-    """Checkout 세션 생성.
-
-    PortOne API 오류가 발생하면 Celery 태스크로 재시도를 예약한다.
-    """
-
-    try:
-        data = await billing.create_checkout(user, payload.offering_id, payload.currency)
-        return PaymentInitResponse(checkout_url=data.get("checkout_url", ""))
-    except Exception as exc:  # noqa: BLE001
-        # 첫 실패 → Celery 재시도 예약
-        create_checkout_with_retry.delay(user.google_sub, payload.offering_id, payload.currency)
-        raise HTTPException(status_code=502, detail="Failed to create checkout session; retry scheduled.") from exc
 
 
 @router.post("/notify")
@@ -123,6 +98,57 @@ async def get_active_subscription(user: User = Depends(get_current_user), sessio
         next_payment_at=next_payment_at,
         expires_at=expires_at,
     )
+
+# === BillingKey 저장 & 첫 결제 ===
+
+class BillingKeyPayload(BaseModel):
+    """프런트엔드에서 전달받는 BillingKey 저장 페이로드."""
+
+    billing_key: str
+    customer_id: str | None = None  # JS SDK issue 시 전달했던 customer.id
+    channel_key: str | None = None  # PayPal 채널 키 (선택)
+
+
+@router.post("/store-billing-key", status_code=201)
+async def store_billing_key(
+    payload: BillingKeyPayload,
+    user: User = Depends(get_current_user),
+):
+    """BillingKey 를 DB 에 저장하고 첫 결제(옵션) 수행."""
+
+    # 1) BillingKey 저장
+    async with get_session_cm() as sess:
+        db_user = await sess.get(User, user.google_sub)
+        if db_user:
+            db_user.billing_key = payload.billing_key
+            sess.add(db_user)
+            await sess.commit()
+
+    # 2) 첫 결제 실행
+    amount_usd = 15.0  # TODO: 플랜 가격에 따라 동적 계산
+    payment_id = f"{user.google_sub}-init"
+    try:
+        await billing.charge_with_billing_key(
+            user,
+            payment_id=payment_id,
+            amount=amount_usd,
+            currency="USD",
+            order_name="subscription-initial",
+        )
+        # 3) 다음 회차 예약 (30일 후)
+        await billing.schedule_next_payment(
+            user,
+            billing_key=payload.billing_key,
+            amount_usd=amount_usd,
+            currency="USD",
+            days_after=30,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # 실패 로깅만 하고 201 반환
+        import logging
+        logging.getLogger(__name__).exception("BillingKey flow error", exc_info=exc)
+
+    return {"status": "ok"}
 
 # === 구독 취소 ===
 

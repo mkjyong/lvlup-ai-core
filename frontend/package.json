@@ -15,23 +15,26 @@
     "generate:api": "openapi --input http://localhost:8000/openapi.json --output src/api/generated --client axios"
   },
   "dependencies": {
+    "@portone/browser-sdk": "^0.0.24",
     "@react-oauth/google": "^0.8.0",
+    "@tanstack/react-query": "^5.22.0",
+    "@vercel/analytics": "^1.5.0",
     "axios": "^1.6.0",
     "classnames": "^2.5.1",
     "framer-motion": "^11.18.2",
+    "jwt-decode": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.50.0",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^4.12.0",
+    "react-markdown": "^9.1.0",
     "react-router-dom": "^6.22.2",
-    "recoil": "^0.7.7",
-    "@tanstack/react-query": "^5.22.0",
-    "uuid": "^9.0.0",
     "recharts": "^2.7.2",
-    "zustand": "^4.5.2",
-    "jwt-decode": "^4.0.0",
-    "@vercel/analytics": "^1.5.0"
+    "recoil": "^0.7.7",
+    "remark-gfm": "^3.0.1",
+    "uuid": "^9.0.0",
+    "zustand": "^4.5.2"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.12.0"
@@ -39,22 +42,22 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.4",
     "@testing-library/react": "^14.0.0",
+    "@types/jwt-decode": "^3.1.0",
+    "@types/node": "^20.11.30",
     "@types/react": "^18.2.21",
     "@types/react-dom": "^18.2.7",
+    "@types/uuid": "^9.0.4",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.56.0",
     "eslint-plugin-react": "^7.33.2",
+    "openapi-typescript-codegen": "0.29.0",
     "postcss": "^8.4.31",
+    "rollup": "^4.12.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.4.2",
     "vite": "^5.2.0",
-    "vitest": "^1.1.0",
-    "@types/uuid": "^9.0.4",
     "vite-plugin-compression": "^0.5.1",
-    "@types/node": "^20.11.30",
-    "openapi-typescript-codegen": "0.29.0",
-    "rollup": "^4.12.0",
-    "@types/jwt-decode": "^3.1.0"
+    "vitest": "^1.1.0"
   }
 }

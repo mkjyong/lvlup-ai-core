@@ -59,20 +59,4 @@ def charge_retry_task(self):  # type: ignore[override]
 
     asyncio.run(_inner())
 
-# 기존 checkout retry 태스크 유지 -------------------------------------------------
-@shared_task(bind=True, max_retries=settings.RETRY_PAYMENT_MAX_ATTEMPTS, default_retry_delay=settings.RETRY_PAYMENT_INTERVAL_HOURS * 3600)
-def create_checkout_with_retry(self, user_id: str, offering_id: str, currency: str = "USD"):  # type: ignore[override]
-    from app.services import portone as billing
-    from app.models.user import User  # pylint: disable=import-error
-
-    async def _inner() -> None:
-        async with get_session() as sess:
-            user = await sess.get(User, user_id)
-            if user is None:
-                return
-            await billing.create_checkout(user, offering_id, currency)
-
-    try:
-        asyncio.run(_inner())
-    except Exception as exc:  # noqa: BLE001
-        raise self.retry(exc=exc)
+# BillingKey 재시도 태스크 제거 (SDK 발급으로 대체)

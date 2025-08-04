@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from dotenv import load_dotenv
+import os
 
 from app.logging import init_logging
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -21,6 +23,9 @@ from app.deps import get_current_user
 from fastapi import Request, HTTPException, status
 
 
+
+# Load .env once at startup (if not already) – ensures os.getenv works for genai_client
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
 
 def create_app() -> FastAPI:
     """FastAPI 앱 팩토리.
@@ -53,6 +58,7 @@ def create_app() -> FastAPI:
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=["X-Chat-Session"],
         )
 
     @app.middleware("http")

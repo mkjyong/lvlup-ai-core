@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import hmac
 import time
+from datetime import datetime, timedelta
 from typing import Dict
 
 import httpx
@@ -23,6 +24,7 @@ from app.models.plan_tier import PlanTier
 from app.services.security import decrypt_email
 
 settings = get_settings()
+
 
 # 공용 HTTP 클라이언트 (Connection pooling)
 _client = httpx.AsyncClient(
@@ -50,51 +52,6 @@ async def _request_with_retry(method: str, url: str, **kwargs):  # noqa: D401
             raise
 
 
-# ---------------------------------------------------------------------------
-# Checkout / Payment
-# ---------------------------------------------------------------------------
-async def create_checkout(user: "User", offering_id: str, currency: str = "USD") -> Dict:
-    """PortOne 결제 사전등록 & Checkout URL 생성.
-
-    반환값 예시: {"checkout_url": "https://checkout.portone.io/<paymentId>", "payment_id": "..."}
-    """
-
-    # 가격 조회 (PlanTier → USD)
-    async with get_session() as session:
-        result = await session.exec(select(PlanTier).where(PlanTier.name == offering_id))
-        plan = result.one_or_none()
-        price_usd = plan.price_usd if plan else 0.0
-
-    from app.services import currency as _currency
-
-    total_amount = price_usd if currency == "USD" else _currency.convert(price_usd, "USD", currency)
-
-    payment_id = f"{user.google_sub}-{offering_id}-{int(time.time())}"
-
-    try:
-        customer_email = decrypt_email(user.email_enc)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail="Invalid encrypted email. Please re-login.") from exc
-
-    body = {
-        "orderName": offering_id,
-        "totalAmount": round(total_amount, 2),
-        "currency": currency,
-        "customer": {
-            "email": customer_email,
-        },
-        "successUrl": f"{settings.DOMAIN_BASE_URL}/billing/success",
-        "failUrl": f"{settings.DOMAIN_BASE_URL}/billing/cancel",
-    }
-
-    # 사전등록 요청
-    await _request_with_retry("POST", f"/payments/{payment_id}/pre-register", json=body)
-
-    # PortOne 결제창 URL (고정 패턴)
-    checkout_url = f"https://checkout.portone.io/{payment_id}"
-
-    return {"checkout_url": checkout_url, "payment_id": payment_id}
-
 
 # ---------------------------------------------------------------------------
 # Webhook Verification
@@ -102,7 +59,8 @@ async def create_checkout(user: "User", offering_id: str, currency: str = "USD")
 async def verify_webhook(raw_body: bytes, signature: str) -> bool:  # noqa: D401
     """PortOne Webhook HMAC-SHA256 검증."""
 
-    secret = settings.PORTONE_WEBHOOK_SECRET or settings.PORTONE_API_SECRET
+
+    secret = settings.PORTONE_WEBHOOK_SECRET 
     computed = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(computed, signature)
 
@@ -179,8 +137,15 @@ async def process_webhook_event(event: Dict):
 # ---------------------------------------------------------------------------
 # Billing Key (Recurring Payment)
 # ---------------------------------------------------------------------------
-async def create_billing_key(user: "User") -> str:
-    """사용자 결제수단을 BillingKey 로 저장하고 반환."""
+async def create_billing_key(user: "User") -> Dict:
+    """PortOne BillingKey 발급 요청.
+
+    반환값 예시:
+        {
+            "issue_url": "https://checkout.portone.io/billing-keys/issue/abcd",
+            "billing_key": "bk_live_xxx"  # 카드 인증 완료 후에만 포함
+        }
+    """
 
     try:
         customer_email = decrypt_email(user.email_enc)
@@ -196,8 +161,11 @@ async def create_billing_key(user: "User") -> str:
 
     resp = await _request_with_retry("POST", "/billing-keys", json=body)
     data = resp.json()
-    billing_key = data.get("billingKey")
 
+    billing_key = data.get("billingKey")
+    issue_url = data.get("issueUrl") or data.get("issue_url")
+
+    # 카드 인증 완료 직후 Webhook 을 받기 전에도 billingKey 가 바로 내려올 수 있다.
     if billing_key:
         from app.models.db import get_session
         async with get_session() as session:
@@ -207,7 +175,7 @@ async def create_billing_key(user: "User") -> str:
                 session.add(db_user)
                 await session.commit()
 
-    return billing_key or ""
+    return {"issue_url": issue_url or "", "billing_key": billing_key}
 
 
 async def charge_with_billing_key(user: "User", payment_id: str, amount: float, currency: str = "USD", order_name: str = "subscription") -> Dict:
@@ -225,3 +193,34 @@ async def charge_with_billing_key(user: "User", payment_id: str, amount: float, 
 
     resp = await _request_with_retry("POST", f"/payments/{payment_id}/billing-key", json=body)
     return resp.json() 
+
+# ---------------------------------------------------------------------------
+# Schedule Next Recurring Payment
+# ---------------------------------------------------------------------------
+async def schedule_next_payment(user: "User", billing_key: str, amount_usd: float, currency: str = "USD", days_after: int = 30):  # noqa: ANN001
+    """포트원 결제 예약 API 호출 – 다음 회차 결제를 예약한다."""
+
+    if not billing_key:
+        raise HTTPException(status_code=400, detail="billing_key required")
+
+    time_to_pay = (datetime.utcnow() + timedelta(days=days_after)).isoformat() + "Z"
+    payment_id = f"{user.google_sub}-scheduled-{int(time.time())}"
+
+    body = {
+        "payment": {
+            "billingKey": billing_key,
+            "orderName": "subscription-recurring",
+            "customer": {"id": user.google_sub},
+            "amount": {"total": round(amount_usd, 2)},
+            "currency": currency,
+        },
+        "timeToPay": time_to_pay,
+    }
+
+    await _request_with_retry(
+        "POST",
+        f"/payments/{payment_id}/schedule",
+        json=body,
+    )
+
+    return payment_id

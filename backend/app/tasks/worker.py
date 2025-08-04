@@ -3,6 +3,8 @@ from celery import Celery
 
 from app.config import get_settings
 
+import ssl
+
 settings = get_settings()
 
 celery_app = Celery(
@@ -10,6 +12,13 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_BACKEND_URL,
 )
+
+# TLS 설정 자동 적용 (rediss:// 사용 시)
+if settings.CELERY_BROKER_URL.startswith("rediss://"):
+    celery_app.conf.broker_use_ssl = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+
+if settings.CELERY_BACKEND_URL.startswith("rediss://"):
+    celery_app.conf.redis_backend_use_ssl = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 
 # 태스크 모듈 자동 검색(app.tasks.*)
 celery_app.autodiscover_tasks(["app.tasks"])

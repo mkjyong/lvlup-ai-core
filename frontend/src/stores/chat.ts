@@ -5,12 +5,13 @@ export interface SessionMeta {
   started_at: string;
   last_used_at: string;
   title?: string;
+  preview?: string | null;
 }
 
 interface ChatStore {
   sessions: SessionMeta[];
   current?: SessionMeta;
-  setCurrent: (id: string) => void;
+  setCurrent: (id?: string) => void;
   setSessions: (arr: SessionMeta[]) => void;
   upsertSession: (m: SessionMeta) => void;
 }
@@ -18,7 +19,7 @@ interface ChatStore {
 export const useChatStore = create<ChatStore>((set) => ({
   sessions: [],
   setCurrent: (id) =>
-    set((s) => ({ current: s.sessions.find((v) => v.id === id) })),
+    set((s) => ({ current: id ? s.sessions.find((v) => v.id === id) : undefined })),
   setSessions: (arr) => set(() => ({ sessions: arr })),
   upsertSession: (meta) =>
     set((s) => {

@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     PORTONE_API_SECRET: str = ""
     PORTONE_BASE_URL: str = "https://api.portone.io"
     PORTONE_WEBHOOK_SECRET: str = ""
+    PORTONE_CHANNEL_KEY: str = ""  # PG 채널 키 (콘솔 → 연동 정보)
+    PORTONE_STORE_ID: str | None = None  # 일부 PG사는 storeId 필요
 
     # === Slack Webhooks ===
     SLACK_WEBHOOK_SUBSCRIPTION_TRACKER: str | None = None
@@ -63,10 +65,6 @@ class Settings(BaseSettings):
         or "pytest" in sys.modules
     )
 
-    print("asdfadsf" , os.getenv("ENVIRONMENT", "prod"))
-    print("asdfadsf" , os.getenv("SLACK_WEBHOOK_SUBSCRIPTION_TRACKER"))
- 
-
     if _IS_TEST_ENV:
         # 안전하지 않은 기본값 – 테스트에서만 사용
         EMAIL_ENC_KEY: str = "rJFkzR1K1MDCItH66fLhNW4Jtm46Jj43HUzfv4jaWTM="
@@ -77,6 +75,8 @@ class Settings(BaseSettings):
         PORTONE_API_SECRET: str = ""
         PORTONE_BASE_URL: str = "https://api.portone.io"
         PORTONE_WEBHOOK_SECRET: str = ""
+        PORTONE_CHANNEL_KEY: str = "test-channel"
+        PORTONE_STORE_ID: str | None = None
 
         # === Slack Webhooks ===
         SLACK_WEBHOOK_SUBSCRIPTION_TRACKER: str | None = None

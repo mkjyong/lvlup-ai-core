@@ -132,7 +132,6 @@ async def ask_stream_endpoint(
     sess, stream_iter = await pipeline.run_stream(
         question=text or "[IMAGE]",
         user_id=user.google_sub,
-        plan_tier=user.plan_tier,
         game=game,
         prompt_type=prompt_type,
         images=parts,  # type: ignore[arg-type]

@@ -26,21 +26,46 @@ const BillingPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // 간단 국가 판별(ko-KR, ko 등) – 실제로는 IP Geo API 가 더 정확
-const isKorean = navigator.language.startsWith('ko');
+const isKorean = false; //navigator.language.startsWith('ko');
 const currency = isKorean ? 'KRW' : 'USD';
 
-  const initiateCheckout = async (offeringId: string) => {
+  const initiateCheckout = async () => {
     try {
-      setLoadingId(offeringId);
-      const res = await api.post<{ checkout_url: string }>('/billing/initiate', {
-        offering_id: offeringId,
-        currency,
+      setLoadingId('subscribe');
+      const PortOne = (await import('@portone/browser-sdk/v2')).default;
+
+      const billingKeyMethod = isKorean ? 'CARD' : 'PAYPAL';
+      const channelKey: string | undefined = isKorean
+        ? (import.meta.env.VITE_PORTONE_CHANNEL_KEY_CARD as string | undefined)
+        : (import.meta.env.VITE_PORTONE_CHANNEL_KEY_PAYPAL as string | undefined);
+
+      const reqBody: Record<string, unknown> = {
+        storeId: import.meta.env.VITE_PORTONE_STORE_ID as string,
+        billingKeyMethod,
+        // 창 타입 명시: 모바일/PC 환경에 따라 팝업 또는 리다이렉트 지정 필요
+        windowType: {
+          pc: "POPUP",
+          mobile: "REDIRECTION",
+        },
+        redirectUrl: window.location.href,
+      };
+      if (channelKey) {
+        reqBody.channelKey = channelKey;
+      }
+
+      const issue: any = await PortOne.requestIssueBillingKey(reqBody as any);
+      if (issue.code !== undefined) throw new Error(issue.message);
+
+      await api.post('/billing/store-billing-key', {
+        billing_key: issue.billingKey,
+        customer_id: issue.customer?.id,
+        channel_key: channelKey,
       });
-      window.location.href = res.data.checkout_url;
+      alert('구독이 활성화되었습니다!');
+      loadSubscription();
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error(err);
-      setError('결제 페이지로 이동하지 못했습니다.');
+      setError('결제 과정에서 오류가 발생했습니다.');
     } finally {
       setLoadingId(null);
     }
@@ -106,7 +131,7 @@ const currency = isKorean ? 'KRW' : 'USD';
                 <button
                   type="button"
                   className="ml-2 underline"
-                  onClick={() => initiateCheckout(offerings[period].id)}
+                  onClick={initiateCheckout}
                 >
                   다시 결제
                 </button>
@@ -165,7 +190,7 @@ const currency = isKorean ? 'KRW' : 'USD';
             <button
               type="button"
               className="w-full mb-3 rounded bg-primary py-3 font-semibold text-bg disabled:opacity-50 motion-safe:hover:shadow-[0_0_8px_var(--color-accent)]"
-              onClick={() => initiateCheckout(offerings[period].id)}
+              onClick={initiateCheckout}
               disabled={loadingId === offerings[period].id}
             >
               {loadingId === offerings[period].id ? '로딩...' : '구매하기'}

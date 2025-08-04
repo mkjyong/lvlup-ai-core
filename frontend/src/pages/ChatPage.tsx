@@ -13,6 +13,12 @@ const ChatPage: React.FC = () => {
   const urlParams = new URLSearchParams(location.search);
   const initialQuestion = urlParams.get('q') ?? '';
   const initialGameParam = (urlParams.get('game') as 'general' | 'lol' | 'pubg' | null) ?? null;
+  const storedGame = (typeof window !== 'undefined' ? localStorage.getItem('lastGameTab') : null) as
+    | 'general'
+    | 'lol'
+    | 'pubg'
+    | null;
+
   const nicknameRef = useRef<string | null>(urlParams.get('nick'));
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -22,7 +28,7 @@ const ChatPage: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [showLimitWarning, setShowLimitWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [game, setGame] = useState<'general' | 'lol' | 'pubg'>(initialGameParam ?? 'general');
+  const [game, setGame] = useState<'general' | 'lol' | 'pubg'>(initialGameParam ?? storedGame ?? 'general');
   const { data: gameIds, updateGameIds } = useGameIds();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -99,12 +105,16 @@ const ChatPage: React.FC = () => {
         text: userMsg.text ?? '',
         files: imageFiles,
         game,
+        sessionId: current?.id,
       });
-    } catch (error) {
+    } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error(error);
+      const errMsg = typeof error?.message === 'string' && error.message.includes('사용량 한도')
+        ? '사용량 한도에 도달했습니다. 플랜을 업그레이드하거나 다음 달에 다시 시도해주세요.'
+        : '오류가 발생했습니다.';
       setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, text: '오류가 발생했습니다.' } : m)),
+        prev.map((m) => (m.id === assistantId ? { ...m, text: errMsg } : m)),
       );
     }
   };
@@ -123,9 +133,9 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     if (!current?.id) return;
     (async () => {
-      const list = await fetch(`/chat/messages?session_id=${current.id}`, {
-        credentials: 'include',
-      }).then((r) => r.json());
+      const { data: list } = await import('../api/client').then((m) =>
+        m.default.get(`/chat/messages`, { params: { session_id: current.id } }),
+      );
       const mapped: ChatMessage[] = list.map((m: any) => ({ id: uuid(), role: m.role, text: m.text }));
       setMessages(mapped);
     })();
@@ -174,8 +184,12 @@ const ChatPage: React.FC = () => {
         <GameToggle
           value={game}
           onChange={(val) => {
-            // @ts-ignore
-            setGame(val);
+            // 게임 변경 시 세션/메시지 초기화
+            setGame(val as 'general' | 'lol' | 'pubg');
+            setMessages([]);
+            assistantMessageIdRef.current = null;
+            useChatStore.getState().setCurrent(undefined);
+            localStorage.setItem('lastGameTab', val);
           }}
         />
       </header>
@@ -195,7 +209,7 @@ const ChatPage: React.FC = () => {
         <div className="border-t border-border bg-bg/70 p-2 backdrop-blur-md">
           <AccountBar
             game={game as 'lol' | 'pubg'}
-            account={gameIds ? gameIds[game as 'lol' | 'pubg'] : undefined}
+            account={gameIds ? (gameIds as Record<'lol' | 'pubg', { account_id: string; region?: string }>)[game] : undefined}
             onSave={async (data) => {
               await updateGameIds({ [game]: data });
             }}

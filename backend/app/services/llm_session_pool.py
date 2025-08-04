@@ -71,7 +71,7 @@ async def get_history_contents(
     row: ChatSessionRow,
     *,
     history_limit: int = DEFAULT_HISTORY_TURNS * 2,
-) -> List[dict]:
+) -> List[types.Content]:
     """DB 에서 최근 history 를 Google Gemini generate_content 형식으로 반환합니다.
 
     기존 ChatSession 객체를 만들지 않고 history 리스트만 구성해 멀티턴 generate_content
@@ -80,7 +80,7 @@ async def get_history_contents(
 
     sid = row.id
     # gather history from DB
-    history: List[dict] = []
+    history: List[types.Content] = []
     try:
         async with get_session() as session:
             from sqlmodel import select
@@ -93,9 +93,21 @@ async def get_history_contents(
             )
             rows = (await session.exec(stmt)).all()
         for msg in reversed(rows):  # oldest → newest
-            history.append({"role": "user", "parts": [msg.question]})
+            # User message
+            history.append(
+                types.Content(
+                    role="user",
+                    parts=[types.Part(text=msg.question)]
+                )
+            )
+            # Model response (if exists)
             if msg.answer:
-                history.append({"role": "model", "parts": [msg.answer]})
+                history.append(
+                    types.Content(
+                        role="model",
+                        parts=[types.Part(text=msg.answer)]
+                    )
+                )
     except Exception:
         history = []  # fallback silently
 

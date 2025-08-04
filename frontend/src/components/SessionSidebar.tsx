@@ -6,9 +6,9 @@ export default function SessionSidebar() {
 
   useEffect(() => {
     (async () => {
-      const list = await fetch("/chat/sessions", { credentials: "include" }).then((r) => r.json());
-      setSessions(list);
-      if (list.length && !current) setCurrent(list[0].id);
+      const { data } = await import("../api/client").then((m) => m.default.get("/chat/sessions"));
+      setSessions(data);
+      if (data.length && !current) setCurrent(data[0].id);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

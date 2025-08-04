@@ -33,15 +33,52 @@ MAX_SIZE = 10_000_000  # 10 MB
 
 
 @router.get("/sessions")
-async def list_sessions(user: User = Depends(get_current_user)):
+async def list_sessions(
+    limit: int = 20,
+    offset: int = 0,
+    user: User = Depends(get_current_user),
+):
+    """Return paginated chat sessions with a short preview (first user question).
+
+    Parameters
+    ----------
+    limit : int, optional
+        Maximum number of sessions to return. Default 20.
+    offset : int, optional
+        Number of sessions to skip (for pagination).
+    """
     async with get_session() as s:
+        # 기본 메타 정보 조회 (pagination)
         stmt = (
             select(ChatSession.id, ChatSession.title, ChatSession.started_at, ChatSession.last_used_at)
             .where(ChatSession.user_google_sub == user.google_sub)
             .order_by(ChatSession.last_used_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
         rows = (await s.exec(stmt)).all()
-        return [dict(r) for r in rows]
+
+        sessions: list[dict] = []
+        for row in rows:
+            # SQLAlchemy Row -> mapping 변환
+            meta = dict(row._mapping)
+            # 세션의 첫 질문 미리보기 가져오기
+            preview_stmt = (
+                select(ChatMessage.question)
+                .where(ChatMessage.session_id == meta["id"], ChatMessage.user_google_sub == user.google_sub)
+                .order_by(ChatMessage.created_at)
+                .limit(1)
+            )
+            preview_row = (await s.exec(preview_stmt)).first()
+            # preview_row can be scalar or Row; handle both
+            if preview_row is None:
+                meta["preview"] = None
+            elif isinstance(preview_row, tuple):
+                meta["preview"] = preview_row[0]
+            else:
+                meta["preview"] = preview_row
+            sessions.append(meta)
+        return sessions
 
 
 # ---------------------------------------------------------------------------

@@ -19,15 +19,19 @@ import uuid
 import os
 from dataclasses import dataclass
 from typing import AsyncIterator, List, Optional, Tuple
-from app.services.genai_client import genai, client as genai_client, types
+from google import genai  # type: ignore
+from google.genai import types  # type: ignore
+
 
 # Ensure API key configured early
 
 from app.models.chat_session import ChatSession
 from app.models.db import get_session
 from app.services import prompt as prompt_service
-from app.services.llm_session_pool import get_chat
 from concurrent.futures import ThreadPoolExecutor
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 전역 한정 ThreadPool – 무제한 스레드 스폰 방지
 _STREAM_EXECUTOR = ThreadPoolExecutor(
@@ -46,22 +50,6 @@ def select_model(game: Optional[str]) -> str:  # noqa: D401
 
 
 # ---------------------------------------------------------------------------
-# Helper – flatten contents for token calc / debug
-# ---------------------------------------------------------------------------
-from typing import List, Dict, Any
-
-def _flatten_contents(contents: List[Dict[str, Any]]) -> str:  # noqa: D401
-    """parts 안의 plain text 를 모두 이어붙여 디버그/토큰계산용 문자열 반환"""
-    buf: List[str] = []
-    for c in contents:
-        for p in c.get("parts", []):
-            if isinstance(p, str):
-                buf.append(p)
-            elif isinstance(p, dict) and "text" in p:
-                buf.append(str(p["text"]))
-    return "\n".join(buf)
-
-# ---------------------------------------------------------------------------
 # Main Pipeline – minimal streaming
 # ---------------------------------------------------------------------------
 
@@ -74,7 +62,6 @@ class RagPipeline:  # noqa: D101 – simple wrapper
         *,
         question: str,
         user_id: str,
-        plan_tier: str = "free",  # plan_tier 는 quota 체크용 – 현재 로직에선 미사용
         game: str | None = None,
         prompt_type: str | None = None,
         images: List[types.Part] | None = None,
@@ -143,50 +130,47 @@ class RagPipeline:  # noqa: D101 – simple wrapper
         # -------------------------------------------------------------------
         # 2) 이전 대화 history 로드 (generate_content 용)
         # -------------------------------------------------------------------
-        from app.services.llm_session_pool import get_history_contents, _DEFAULT_TOOLS
+        from app.services.llm_session_pool import get_history_contents
 
         history_contents = await get_history_contents(sess)
 
         # -------------------------------------------------------------------
         # 3) 사용자 입력 파트 구성 (multimodal)
         # -------------------------------------------------------------------
-        user_parts: list = list(images) if images else []
-        user_parts.append(question)
-        history_contents.append({"role": "user", "parts": user_parts})
+        user_parts: list[types.Part] = list(images) if images else []
+        user_parts.append(types.Part(text=question))
+        history_contents.append(types.Content(role="user", parts=user_parts))
 
         # -------------------------------------------------------------------
         # 4) Gemini generate_content(스트리밍) 호출
         # -------------------------------------------------------------------
         # Google GenAI SDK v1 사용 – Client 기반 호출로 변경
-        client = genai_client
-        gen_conf = {
-            "candidate_count": 1,
-            "max_output_tokens": 5000,
-        }
+        client = genai.Client()
+        grounding_tool = types.Tool(
+            google_search=types.GoogleSearch()
+        )
 
         # --- Blocking -> Async 변환 -----------------------------------------
-        import asyncio
-        import structlog
-        logger = structlog.get_logger(__name__)
-
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
-        logger.info("gemini_request_init", history_len=len(history_contents), prompt_preview=_flatten_contents(history_contents)[:200])
-
         def _worker() -> None:
             try:
-                for chunk in client.models.generate_content(
+                response = client.models.generate_content_stream(
                     model=sess.model,
                     contents=history_contents,
-                    stream=True,
-                    tools=_DEFAULT_TOOLS,
-                    generation_config=types.GenerationConfig(**gen_conf),
-                ):
+                    config=types.GenerateContentConfig(
+                        max_output_tokens = 5000,
+                        tools=[grounding_tool],
+                        system_instruction=sess.system_prompt,
+                    ),
+                )
+
+                for chunk in response:
                     text = getattr(chunk, "text", None)
                     if text:
-                        logger.debug("gemini_chunk", text=text)
                         loop.call_soon_threadsafe(queue.put_nowait, text)
+                        
             except Exception as e:
                 logger.error("gemini_stream_error", err=str(e), exc_info=True)
             finally:
@@ -200,7 +184,6 @@ class RagPipeline:  # noqa: D101 – simple wrapper
                 item = await queue.get()
                 if item is None:
                     break
-                logger.debug("send_token_to_client", token=item)
                 yield item
 
         return sess, _iter()

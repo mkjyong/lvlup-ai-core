@@ -38,6 +38,19 @@ export function useChatSession() {
 
     let res = await doRequest(localStorage.getItem("token") || undefined);
 
+    // --- 에러 상태 선처리 -----------------------------------
+    if (res.status === 429) {
+      // 사용량 한도 초과 → 사용자에게 명확한 메시지 전달
+      let detail = "사용량 한도에 도달했습니다.";
+      try {
+        const j = await res.json();
+        if (typeof j.detail === "string") detail = j.detail;
+      } catch {
+        // ignore parsing error; keep default detail
+      }
+      throw new Error(detail);
+    }
+
     if (res.status === 401) {
       try {
         const refreshResp = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/refresh`, {
