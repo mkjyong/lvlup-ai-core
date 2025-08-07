@@ -32,8 +32,8 @@ const BillingPage: React.FC = () => {
   const [successModalOpen, setSuccessModalOpen] = useState(false);
 
   // 간단 국가 판별(ko-KR, ko 등) – 실제로는 IP Geo API 가 더 정확
-// const isKorean = typeof navigator !== 'undefined' && navigator.language.startsWith('ko');
-const isKorean = false;
+const isKorean = typeof navigator !== 'undefined' && navigator.language.startsWith('ko');
+// const isKorean = false;
 const currency = isKorean ? 'KRW' : 'USD';
 
   const initiateCheckout = async () => {
@@ -98,7 +98,7 @@ const currency = isKorean ? 'KRW' : 'USD';
             channelKey: channelKey as string,
           },
           {
-            onIssueBillingKeySuccess: async (response) => {
+            onIssueBillingKeySuccess: async (response: any) => {
               try {
                 await api.post('/billing/store-billing-key', {
                   billing_key: response.billingKey,
@@ -113,12 +113,26 @@ const currency = isKorean ? 'KRW' : 'USD';
                 setLoadingId(null);
               }
             },
-            onIssueBillingKeyFail: (error) => {
+            // PayPal 빌링키 발급 실패 시(code 포함) 로그 전송 & UI 복원
+            onIssueBillingKeyFail: async (error: any) => {
               console.error(error);
-              setError(error.message || '결제 과정에서 오류가 발생했습니다.');
+              try {
+                await api.post('/billing/log-failure', {
+                  code: error.code ?? 'UNKNOWN',
+                  message: error.message,
+                });
+              } catch (logErr) {
+                console.error('Failed to log billing error', logErr);
+              }
+              setError(`${error.message || '결제 과정에서 오류가 발생했습니다.'} (code: ${error.code ?? 'N/A'})`);
               setLoadingId(null);
             },
-          },
+            // 사용자가 PayPal 창을 닫은 경우
+            onIssueBillingKeyCancel: () => {
+              setLoadingId(null);
+                            toast('결제를 취소하셨습니다.');
+             },
+          } as any,
         );
         setPayPalUILoaded(true);
       } catch (err) {

@@ -150,6 +150,32 @@ async def store_billing_key(
 
     return {"status": "ok"}
 
+# === Billing Failure Logging ===
+
+class BillingFailurePayload(BaseModel):
+    """결제/빌링키 발급 실패 로그 페이로드."""
+    code: str
+    message: str
+
+
+@router.post("/log-failure", status_code=201)
+async def log_billing_failure(
+    payload: BillingFailurePayload,
+    user: User = Depends(get_current_user),
+):
+    """PayPal BillingKey 발급 실패·취소 오류를 저장한다."""
+    async with get_session_cm() as sess:
+        plog = PaymentLog(
+            user_google_sub=user.google_sub,
+            offering_id="",
+            event_type="issue_failed",
+            amount_usd=0.0,
+            raw_event={"code": payload.code, "message": payload.message},
+        )
+        sess.add(plog)
+        await sess.commit()
+    return {"status": "logged"}
+
 # === 구독 취소 ===
 
 
@@ -163,6 +189,15 @@ async def cancel_subscription(payload: CancelRequest, user: User = Depends(get_c
 
     result = await billing.cancel_subscription(user, payload.payment_id)
 
+    # 응답 status 분석 (REQUESTED = 승인 대기)
+    payment_status = (result.get("status") or "").upper()
+    if payment_status == "REQUESTED":
+        cancel_status = "pending"
+    elif payment_status in {"CANCELLED", "CANCELED"}:
+        cancel_status = "cancelled"
+    else:
+        cancel_status = payment_status.lower() if payment_status else "unknown"
+
     # 만료 시점 조회
     async with get_session_cm() as sess:
         plan_row = (
@@ -175,4 +210,4 @@ async def cancel_subscription(payload: CancelRequest, user: User = Depends(get_c
         ).one_or_none()
         expires_at = plan_row.expires_at.isoformat() if plan_row and plan_row.expires_at else None
 
-    return {"status": "cancelled", "expires_at": expires_at, "rc": result} 
+    return {"status": cancel_status, "expires_at": expires_at, "rc": result} 

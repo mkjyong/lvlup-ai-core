@@ -5,13 +5,13 @@ import TestimonialsSection from '../components/landing/TestimonialsSection';
 import CTASection from '../components/landing/CTASection';
 import Footer from '../components/landing/Footer';
 import Header from '../components/landing/Header';
-import HighlightReel from '../components/landing/HighlightReel';
+// import HighlightReel from '../components/landing/HighlightReel';
 
 const HomePage: React.FC = () => (
   <>
     <Header />
     <HeroDuo />
-    <HighlightReel />
+    {/* <HighlightReel /> */}
     <FeaturesSection />
     <TestimonialsSection />
     <CTASection />
