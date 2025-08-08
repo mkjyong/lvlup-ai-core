@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../hooks/useTheme';
+import LanguageSwitcher from '../components/ui/LanguageSwitcher';
 import ReferralSection from '../components/ReferralSection';
 import GameAccountSection from '../components/GameAccountSection';
 import SubscriptionSection from '../components/SubscriptionSection';
@@ -10,7 +11,7 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col bg-bg text-text">
-      <header className="border-b border-accent/50 p-4 text-xl font-display text-accent shadow-[0_1px_4px_rgba(0,255,149,0.1)]">설정</header>
+      <header className="flex items-center border-b border-accent/50 p-4 text-xl font-display text-accent shadow-[0_1px_4px_rgba(0,255,149,0.1)]"><span>설정</span><div className="ml-auto"><LanguageSwitcher /></div></header>
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto grid max-w-screen-sm gap-6">
           {/* Theme card */}

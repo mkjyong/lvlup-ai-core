@@ -7,6 +7,7 @@ import App from './App';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import './i18n';
 import './globals.css';
 // @ts-ignore - Vercel Analytics has no type declaration yet
 import { inject } from '@vercel/analytics';

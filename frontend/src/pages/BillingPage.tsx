@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSubscription } from '../hooks/useSubscription';
 import Modal from '../components/ui/Modal';
 import api from '../api/client';
@@ -31,8 +32,9 @@ const BillingPage: React.FC = () => {
   const [paypalUILoaded, setPayPalUILoaded] = useState(false);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
 
-  // 간단 국가 판별(ko-KR, ko 등) – 실제로는 IP Geo API 가 더 정확
-const isKorean = typeof navigator !== 'undefined' && navigator.language.startsWith('ko');
+  const { t, i18n } = useTranslation();
+  // 언어 기반 KR 여부 판단 (ko 계열)
+  const isKorean = i18n.language.startsWith('ko');
 // const isKorean = false;
 const currency = isKorean ? 'KRW' : 'USD';
 
@@ -154,26 +156,26 @@ const currency = isKorean ? 'KRW' : 'USD';
     const d = new Date(subInfo.expires_at);
     const diff = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     if (diff < 0) return null;
-    return `구독이 ${diff}일 후(${d.toLocaleDateString()}) 만료됩니다`;
-  }, [subInfo?.expires_at]);
+    return t('billing.expires_banner', { days: diff, date: d.toLocaleDateString() });
+  }, [subInfo?.expires_at, t]);
 
   const cancelSubscription = async () => {
     if (!subInfo?.payment_id) return;
-    if (!window.confirm('정말 구독을 해지하시겠습니까?')) return;
+    if (!window.confirm(t('billing.confirm_cancel'))) return;
     try {
       await cancel(subInfo.payment_id);
-      toast.success('구독이 해지되었습니다');
+      toast.success(t('billing.cancel_success'));
       refetch();
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(err);
-      toast.error('해지 실패: ' + (err as Error).message);
+      toast.error(t('billing.cancel_fail', { message: (err as Error).message }));
     }
   };
 
   return (
     <div className="flex h-screen flex-col bg-bg text-text">
-      <header className="border-b border-border p-4 text-xl font-display">결제 관리</header>
+      <header className="border-b border-border p-4 text-xl font-display">{t('billing.header')}</header>
       <main className="flex-1 p-6 flex flex-col items-center justify-center">
         <div className="w-full max-w-md rounded-2xl border border-transparent bg-white/5 p-1 shadow-medium transition-transform motion-safe:hover:-translate-y-1 bg-gradient-to-br from-primary/40 via-accent/30 to-secondary/40">
           <div className="rounded-2xl bg-bg p-8 text-center">
@@ -181,22 +183,22 @@ const currency = isKorean ? 'KRW' : 'USD';
             {expiresBanner && <p className="mb-2 text-sm text-primary/80">{expiresBanner}</p>}
             {subInfo?.status === 'payment_failed' && (
               <div className="mb-4 rounded bg-red-500/10 p-2 text-sm text-red-400">
-                결제에 실패했습니다. 결제 정보를 업데이트하고 다시 시도해 주세요.
+                {t('billing.payment_failed')}
                 <button
                   type="button"
                   className="ml-2 underline"
                   onClick={initiateCheckout}
                 >
-                  다시 결제
+                  {t('billing.resubscribe')}
                 </button>
               </div>
             )}
             <h2 className="mb-4 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-3xl font-extrabold text-transparent drop-shadow">
-              {offerings[period].name} 플랜
+              {t('billing.plan', { plan: offerings[period].name })}
             </h2>
             {/* Toggle */}
             <div className="mb-6 flex items-center justify-center gap-3 text-sm">
-              <span className={period === 'monthly' ? 'text-accent font-semibold' : 'text-muted'}>월간</span>
+              <span className={period === 'monthly' ? 'text-accent font-semibold' : 'text-muted'}>{t('billing.monthly')}</span>
               <button
                 type="button"
                 aria-label="기간 전환"
@@ -207,7 +209,7 @@ const currency = isKorean ? 'KRW' : 'USD';
                   className={`inline-block h-4 w-4 transform rounded-full bg-bg transition-transform ${period === 'yearly' ? 'translate-x-6' : 'translate-x-1'}`}
                 />
               </button>
-              <span className={period === 'yearly' ? 'text-accent font-semibold' : 'text-muted'}>연간</span>
+              <span className={period === 'yearly' ? 'text-accent font-semibold' : 'text-muted'}>{t('billing.yearly')}</span>
             </div>
             {subInfo?.amount_usd ? (
               <p className="mb-6 text-4xl font-bold text-accent drop-shadow">
@@ -218,27 +220,24 @@ const currency = isKorean ? 'KRW' : 'USD';
             ) : (
               <p className="mb-6 text-4xl font-bold text-accent drop-shadow">
                 {currency === 'KRW'
-                  ? `₩${offerings[period].priceKrw.toLocaleString()} / 월`
-                  : `$${offerings[period].priceUsd} / 월`}
-                {currency === 'KRW' && (
-                  <span className="ml-1 align-baseline text-xs text-muted">(VAT 별도)</span>
-                )}
+                  ? t('billing.cost_per_month_vat', { price: `₩${offerings[period].priceKrw.toLocaleString()}` })
+                  : t('billing.cost_per_month', { price: `$${offerings[period].priceUsd}` })}
               </p>
             )}
 
             {/* Feature list */}
             <ul className="mb-8 space-y-2 text-left text-sm sm:text-base">
               <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span> AI 챗 코칭 무제한
+                <span className="text-accent">✔</span> {t('billing.features.ai_unlimited')}
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span> 게임 특화 코칭(LOL, 배그 등 지속 추가)
+                <span className="text-accent">✔</span> {t('billing.features.game_specific')}
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span> 개인 맞춤 목표 & 코칭(9월 예정)
+                <span className="text-accent">✔</span> {t('billing.features.personalized')}
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span> 최신 패치 인사이트 제공
+                <span className="text-accent">✔</span> {t('billing.features.patch_insight')}
               </li>
             </ul>
             {isSubscribed ? (
@@ -247,7 +246,7 @@ const currency = isKorean ? 'KRW' : 'USD';
                 className="w-full mb-3 rounded bg-red-600 py-3 font-semibold text-bg disabled:opacity-50 motion-safe:hover:shadow-[0_0_8px_var(--color-accent)]"
                 onClick={cancelSubscription}
               >
-                구독 해지하기
+                {t('billing.cancel')}
               </button>
             ) : (
               isKorean ? (
@@ -257,7 +256,7 @@ const currency = isKorean ? 'KRW' : 'USD';
                 onClick={initiateCheckout}
                 disabled={loadingId === offerings[period].id}
               >
-                {loadingId === offerings[period].id ? '로딩...' : '구매하기'}
+                {loadingId === offerings[period].id ? t('billing.loading') : t('billing.subscribe')}
               </button>
             ) : (
               <>
@@ -268,7 +267,7 @@ const currency = isKorean ? 'KRW' : 'USD';
                     onClick={initiateCheckout}
                     disabled={loadingId === offerings[period].id}
                   >
-                    {loadingId === offerings[period].id ? '로딩...' : 'PayPal로 결제하기'}
+                    {loadingId === offerings[period].id ? t('billing.loading') : t('billing.paypal')}
                   </button>
                 )}
                 {/* PayPal 버튼 렌더링 컨테이너 */}
@@ -280,13 +279,13 @@ const currency = isKorean ? 'KRW' : 'USD';
         </div>
       </main>
       <Modal open={successModalOpen} onClose={() => setSuccessModalOpen(false)}>
-        <h3 className="mb-4 text-lg font-bold">구독이 활성화되었습니다!</h3>
+        <h3 className="mb-4 text-lg font-bold">{t('billing.success_title')}</h3>
         <button
           type="button"
           className="w-full rounded bg-primary py-2 font-semibold text-bg"
           onClick={() => setSuccessModalOpen(false)}
         >
-          확인
+          {t('billing.confirm')}
         </button>
       </Modal>
     </div>

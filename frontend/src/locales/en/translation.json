@@ -1,0 +1,41 @@
+{
+  "hero": {
+    "title_part1": "Unleash your potential with",
+    "title_part2": "AI Game Coaching",
+    "subtitle_before": "Analyze your gameplay data and",
+    "subtitle_highlight": "instantly",
+    "subtitle_after": "improve your skills.",
+    "cta": "Start for free",
+    "more": "Learn more"
+  },
+  "header": {
+    "dashboard": "Dashboard",
+    "login": "Login / Sign Up"
+  },
+  "billing": {
+    "header": "Billing Management",
+    "plan": "{{plan}} Plan",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "cost_per_month": "{{price}} / mo",
+    "cost_per_month_vat": "{{price}} / mo (VAT excluded)",
+    "features": {
+      "ai_unlimited": "Unlimited AI chat coaching",
+      "game_specific": "Game-specialized coaching (more titles coming)",
+      "personalized": "Personalized goals & coaching (coming Sep)",
+      "patch_insight": "Latest patch insights"
+    },
+    "subscribe": "Subscribe",
+    "loading": "Loading...",
+    "paypal": "Pay with PayPal",
+    "cancel": "Cancel Subscription",
+    "resubscribe": "Retry Payment",
+    "payment_failed": "Payment failed. Update your payment info and try again.",
+    "confirm_cancel": "Are you sure you want to cancel your subscription?",
+    "cancel_success": "Subscription cancelled",
+    "cancel_fail": "Cancellation failed: {{message}}",
+    "success_title": "Subscription activated!",
+    "confirm": "OK",
+    "expires_banner": "Subscription expires in {{days}} days ({{date}})"
+  }
+}

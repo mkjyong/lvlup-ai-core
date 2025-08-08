@@ -1,0 +1,41 @@
+{
+  "hero": {
+    "title_part1": "당신의 잠재력을 깨우는",
+    "title_part2": "AI 게임 코치",
+    "subtitle_before": "게임 데이터를 분석하여 실력을",
+    "subtitle_highlight": "즉시",
+    "subtitle_after": "끌어올려 보세요.",
+    "cta": "무료로 시작하기",
+    "more": "더 알아보기"
+  },
+  "header": {
+    "dashboard": "대시보드",
+    "login": "로그인 / 회원가입"
+  },
+  "billing": {
+    "header": "결제 관리",
+    "plan": "{{plan}} 플랜",
+    "monthly": "월간",
+    "yearly": "연간",
+    "cost_per_month": "{{price}} / 월",
+    "cost_per_month_vat": "{{price}} / 월 (VAT 별도)",
+    "features": {
+      "ai_unlimited": "AI 챗 코칭 무제한",
+      "game_specific": "게임 특화 코칭(LOL, 배그 등 지속 추가)",
+      "personalized": "개인 맞춤 목표 & 코칭(9월 예정)",
+      "patch_insight": "최신 패치 인사이트 제공"
+    },
+    "subscribe": "구매하기",
+    "loading": "로딩...",
+    "paypal": "PayPal로 결제하기",
+    "cancel": "구독 해지하기",
+    "resubscribe": "다시 결제",
+    "payment_failed": "결제에 실패했습니다. 결제 정보를 업데이트하고 다시 시도해 주세요.",
+    "confirm_cancel": "정말 구독을 해지하시겠습니까?",
+    "cancel_success": "구독이 해지되었습니다",
+    "cancel_fail": "해지 실패: {{message}}",
+    "success_title": "구독이 활성화되었습니다!",
+    "confirm": "확인",
+    "expires_banner": "구독이 {{days}}일 후({{date}}) 만료됩니다"
+  }
+}
