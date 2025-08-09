@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { v4 as uuid } from 'uuid';
 import ChatBubble, { ChatMessage } from '../components/ChatBubble';
+import ThinkingBubble from '../components/ThinkingBubble';
 import GameToggle from '../components/GameToggle';
 import AccountBar from '../components/AccountBar';
 import { useGameIds } from '../hooks/useGameIds';
@@ -33,8 +34,9 @@ const ChatPage: React.FC = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Streaming hook ---------------------------------------------
-  const { streamText, start: startStream } = useChatSession();
+  const { streamText, isThinking, start: startStream, abort, regenerate } = useChatSession();
   const assistantMessageIdRef = useRef<string | null>(null);
+  const lastPayloadRef = useRef<{ text: string; files: File[]; game: 'general' | 'lol' | 'pubg'; sessionId?: string | undefined } | null>(null);
 
   // helper to add files with limit
   const addImageFiles = (files: File[]) => {
@@ -98,15 +100,13 @@ const ChatPage: React.FC = () => {
 
     const assistantId = uuid();
     assistantMessageIdRef.current = assistantId;
-    setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', text: '...' }]);
+    // placeholder text omitted; ThinkingBubble renders separately
+    setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', text: '' }]);
 
     try {
-      await startStream({
-        text: userMsg.text ?? '',
-        files: imageFiles,
-        game,
-        sessionId: current?.id,
-      });
+      const payload = { text: userMsg.text ?? '', files: imageFiles, game, sessionId: current?.id } as const;
+      lastPayloadRef.current = payload as any;
+      await startStream(payload);
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error(error);
@@ -203,6 +203,7 @@ const ChatPage: React.FC = () => {
         {messages.map((msg) => (
           <ChatBubble key={msg.id} message={msg} />
         ))}
+        {isThinking && <ThinkingBubble />}
         <div ref={bottomRef} />
       </main>
       {game !== 'general' && (
@@ -280,6 +281,29 @@ const ChatPage: React.FC = () => {
           >
             <path d="M1 8l14-7v14L1 8z" />
           </svg>
+        </button>
+        <button
+          type="button"
+          className="rounded border border-border bg-surface px-3 py-2 text-xs text-text disabled:opacity-40"
+          onClick={() => abort()}
+          disabled={!isThinking}
+        >
+          중단
+        </button>
+        <button
+          type="button"
+          className="rounded border border-border bg-surface px-3 py-2 text-xs text-text disabled:opacity-40"
+          onClick={async () => {
+            if (lastPayloadRef.current) {
+              const assistantId = uuid();
+              assistantMessageIdRef.current = assistantId;
+              setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', text: '' }]);
+              await regenerate();
+            }
+          }}
+          disabled={isThinking || !lastPayloadRef.current}
+        >
+          다시 생성
         </button>
       </form>
     </div>

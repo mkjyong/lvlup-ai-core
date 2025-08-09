@@ -38,4 +38,65 @@
     "confirm": "OK",
     "expires_banner": "Subscription expires in {{days}} days ({{date}})"
   }
+  ,
+  "legal": {
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy"
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "effective_date": "Effective: 2025-01-01",
+    "sections": {
+      "purpose_title": "1. Purpose",
+      "purpose_body": "These Terms govern the use of the LVLUP AI service (the “Service”) provided by BeyondFuture (the “Company”).",
+      "effect_change_title": "2. Effect and Changes",
+      "effect_change_body": "These Terms take effect when posted. The Company may change the Terms within the scope permitted by law and will notify users in advance.",
+      "account_title": "3. Account and Registration",
+      "account_body": "Users may create an account via Google OAuth. Users are responsible for the accuracy and currency of their information.",
+      "billing_title": "4. Paid Services and Billing",
+      "billing_body": "Subscription billing, renewals, cancellations, and refunds follow the in-service guidance and applicable laws. Recurring charges may be processed automatically as notified.",
+      "use_title": "5. Use of the Service",
+      "use_body": "Users must comply with applicable laws, these Terms, and service guidance. Prohibited acts include rights infringement, reverse engineering, abusive scraping, abnormal traffic, and illegal/harmful content.",
+      "ip_title": "6. Intellectual Property",
+      "ip_body": "Intellectual property in the Service and content belongs to the Company or rightful owners. Users shall not infringe related rights.",
+      "disclaimer_title": "7. Disclaimer and Limitation of Liability",
+      "disclaimer_body": "The Company is not liable for damages caused by force majeure or third parties. Service suspension or changes are subject to legal limits of liability.",
+      "termination_title": "8. Termination",
+      "termination_body": "Users may delete accounts or cancel subscriptions at any time. The Company may terminate for cause, including violations of these Terms.",
+      "law_title": "9. Governing Law and Dispute Resolution",
+      "law_body": "These Terms are governed by the laws of the Republic of Korea. Disputes shall be resolved by consultation or brought to a competent court.",
+      "contact_title": "10. Contact",
+      "contact_body": "Email: {{email}}"
+    }
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "effective_date": "Effective: 2025-01-01",
+    "sections": {
+      "intro_title": "1. General",
+      "intro_body": "BeyondFuture (the “Company”) values users’ personal data and complies with relevant laws. This Policy describes collection, use, retention, destruction, and user rights.",
+      "collection_title": "2. Data Collected and Methods",
+      "collection_body": "Required: Google account identifier (google_sub), email. Optional: profile image, logs/usage data generated during service use.",
+      "purpose_title": "3. Purpose of Use",
+      "purpose_body": "We use personal data to manage accounts, provide and maintain the Service, process paid/recurring payments, respond to inquiries, improve quality, and enhance security.",
+      "retention_title": "4. Retention and Destruction",
+      "retention_body": "Data is retained for the period required by law or until the purpose is achieved, and destroyed without delay thereafter.",
+      "third_title": "5. Third-Party Provision",
+      "third_body": "Data is provided only when required by law or with user consent.",
+      "outsourcing_title": "6. Processing Outsourcing",
+      "outsourcing_body": "We manage and supervise entrusted processors for payment/auth/analytics, etc.",
+      "overseas_title": "7. Overseas Transfer",
+      "overseas_body": "When using overseas servers (e.g., cloud), we follow legal procedures and safeguards.",
+      "rights_title": "8. User Rights",
+      "rights_body": "Users may request access/rectification/deletion/processing restriction and withdraw consent at any time.",
+      "security_title": "9. Security Measures",
+      "security_body": "We implement technical and administrative safeguards such as encryption, access control, and log monitoring.",
+      "cookie_title": "10. Cookies",
+      "cookie_body": "We may use cookies and similar technologies to improve service quality and usability. Users can refuse cookies via browser settings.",
+      "change_title": "11. Changes to this Policy",
+      "change_body": "We may change this Policy due to legal or service changes and will notify users in advance.",
+      "contact_title": "12. Contact",
+      "contact_body": "Email: {{email}}"
+    }
+  }
 }

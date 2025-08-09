@@ -10,12 +10,16 @@ const BillingPage = lazy(() => import('./pages/BillingPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const OnboardingWizard = lazy(() => import('./pages/OnboardingWizard'));
 const PerformancePage = lazy(() => import('./pages/PerformancePage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
 
 const App: React.FC = () => (
   <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/auth" element={<AuthPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route element={<ProtectedRoute />}> 
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/history" element={<HistoryPage />} />

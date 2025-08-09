@@ -36,6 +36,16 @@ const ChatBubble: React.FC<Props> = ({ message }) => {
     }
   }
 
+  // Hide empty assistant placeholder (render ThinkingBubble externally)
+  if (
+    message.role === 'assistant' &&
+    (!message.text || message.text.trim().length === 0) &&
+    !structuredData &&
+    (!message.imageUrls || message.imageUrls.length === 0)
+  ) {
+    return null;
+  }
+
   return (
     <div
       className={clsx('my-2 flex', {

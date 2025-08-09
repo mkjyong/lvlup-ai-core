@@ -11,9 +11,13 @@ interface SendPayload {
 export function useChatSession() {
   const { current, upsertSession } = useChatStore();
   const [streamText, setStreamText] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastPayloadRef = useRef<SendPayload | null>(null);
 
   const start = useCallback(async (payload: SendPayload) => {
+    lastPayloadRef.current = payload;
     const form = new FormData();
     // 세션 ID
     if (payload.sessionId) {
@@ -28,11 +32,13 @@ export function useChatSession() {
     payload.files?.forEach((f) => form.append("image", f, f.name));
 
     async function doRequest(accessToken?: string): Promise<Response> {
+      abortControllerRef.current = new AbortController();
       return fetch(`${import.meta.env.VITE_API_BASE_URL}/api/coach/ask/stream`, {
         method: "POST",
         body: form,
         credentials: "include",
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        signal: abortControllerRef.current.signal,
       });
     }
 
@@ -77,6 +83,7 @@ export function useChatSession() {
     if (!res.body) return;
     readerRef.current = res.body.getReader();
     setStreamText("");
+    setIsThinking(true);
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -89,12 +96,41 @@ export function useChatSession() {
       while ((idx = buffer.indexOf("\n\n")) !== -1) {
         const chunk = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 2);
-        if (chunk.startsWith("data:")) {
-          setStreamText((prev) => prev + chunk.replace("data:", ""));
+        // Parse SSE: optional 'event:' + required 'data:'
+        const lines = chunk.split("\n");
+        const eventLine = lines.find((l) => l.startsWith("event:"));
+        const dataLine = lines.find((l) => l.startsWith("data:"));
+        if (dataLine) {
+          const data = dataLine.replace("data:", "");
+          const ev = eventLine ? eventLine.replace("event:", "").trim() : undefined;
+          if (ev === "thinking") {
+            setIsThinking(true);
+          } else if (ev === "token") {
+            setStreamText((prev) => prev + data);
+          } else if (ev === "done") {
+            setIsThinking(false);
+          } else if (!ev) {
+            // backward compatibility: treat as token
+            setStreamText((prev) => prev + data);
+          }
         }
       }
     }
+    setIsThinking(false);
   }, [current]);
 
-  return { streamText, start };
+  const abort = useCallback(() => {
+    try {
+      abortControllerRef.current?.abort();
+    } catch {}
+    setIsThinking(false);
+  }, []);
+
+  const regenerate = useCallback(async () => {
+    if (lastPayloadRef.current) {
+      await start(lastPayloadRef.current);
+    }
+  }, [start]);
+
+  return { streamText, isThinking, start, abort, regenerate };
 }

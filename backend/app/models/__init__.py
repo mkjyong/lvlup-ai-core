@@ -12,3 +12,4 @@ from .match_cache import MatchCache  # noqa: F401
 from .performance_stats import PerformanceStats  # noqa: F401
 from .chat_session import ChatSession  # noqa: F401
 from .chat import ChatMessage  # noqa: F401 
+from .user_consent import UserConsent  # noqa: F401

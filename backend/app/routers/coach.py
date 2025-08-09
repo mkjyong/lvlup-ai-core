@@ -154,13 +154,17 @@ async def ask_stream_endpoint(
         await db.refresh(chat_log)
 
     # -------------------------------------------------------------
-    # SSE generator – token only
+    # SSE generator – explicit events for richer UX
     # -------------------------------------------------------------
     async def event_generator():  # noqa: D401
+        # signal to UI that model is preparing a response
+        yield "event:thinking\ndata:START\n\n"
+
         fragments: list[str] = []
         async for token in stream_iter:
             fragments.append(token)
-            yield f"data:{token}\n\n"
+            # send tokens with explicit event name for forward compatibility
+            yield f"event:token\ndata:{token}\n\n"
         # 스트림 종료 – answer/세션 메타 저장
         full_answer = "".join(fragments)
         # --- 사용량 로깅 ---------------------------------------------------
@@ -208,7 +212,11 @@ async def ask_stream_endpoint(
             await db2.commit()
         yield "event:done\ndata:END\n\n"
 
-    headers = {"X-Chat-Session": sess.id}
+    headers = {
+        "X-Chat-Session": sess.id,
+        # prevent intermediaries from buffering SSE
+        "Cache-Control": "no-cache",
+    }
     return StreamingResponse(event_generator(), headers=headers, media_type="text/event-stream")
 
 # 기록 조회

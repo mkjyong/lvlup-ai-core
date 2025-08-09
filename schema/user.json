@@ -8,7 +8,9 @@
     "email": {"type": "string", "format": "email"},
     "avatar": {"type": "string", "format": "uri", "nullable": true},
     "plan_tier": {"type": "string", "enum": ["free", "premium"]},
-    "created_at": {"type": "string", "format": "date-time"}
+    "created_at": {"type": "string", "format": "date-time"},
+    "terms_accepted_at": {"type": ["string", "null"], "format": "date-time"},
+    "privacy_accepted_at": {"type": ["string", "null"], "format": "date-time"}
   },
   "required": ["google_sub", "email", "plan_tier", "created_at"]
 } 
